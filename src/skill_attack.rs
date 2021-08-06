@@ -13,6 +13,7 @@ pub struct SkillAttackSong {
     pub song_name: String,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct SkillAttackScore {
     pub beg_score: Option<u32>,
     pub basic_score: Option<u32>,
@@ -21,6 +22,7 @@ pub struct SkillAttackScore {
     pub chal_score: Option<u32>,
 }
 
+#[derive(Debug, Clone)]
 pub struct UserScores {
     pub user_id: u32,
     pub user_name: String,
@@ -28,21 +30,48 @@ pub struct UserScores {
 }
 
 pub async fn get_scores(http: Client, ddr_code: u32) -> Result<UserScores> {
-    let base = "http://skillattack.com/sa4/dancer_score.php?_=matrix&ddrcode=";
-    let url = format!("{}{}", base, ddr_code);
-
-    let webpage = http.get(&url).send().await?.text().await?;
+    let webpage = get_skill_attack_webpage(http, ddr_code).await?;
     let s_name_index = webpage
         .find("sName")
         .ok_or(anyhow::anyhow!("couldn't find thing in html"))?;
     let webpage = &webpage[s_name_index..];
 
-    let (user_scores, _) = get_scores_and_song(webpage, ddr_code, false)?;
+    let (user_scores, _) = get_scores_and_song_inner(webpage, ddr_code, false)?;
 
     Ok(user_scores)
 }
 
-fn get_scores_and_song(
+pub async fn get_scores_and_song(
+    http: Client,
+    ddr_code: u32,
+) -> Result<(UserScores, Vec<SkillAttackSong>)> {
+    println!("Sent web request");
+    let webpage = get_skill_attack_webpage(http, ddr_code).await?;
+    let s_name_index = webpage
+        .find("sName")
+        .ok_or(anyhow::anyhow!("couldn't find thing in html"))?;
+    let webpage = &webpage[s_name_index..];
+
+    println!("got webpage");
+    let (user_scores, songs) = get_scores_and_song_inner(webpage, ddr_code, true)?;
+
+    Ok((user_scores, songs.expect("Unexpectedly None")))
+}
+
+async fn get_skill_attack_webpage(http: Client, ddr_code: u32) -> Result<String> {
+    let base = "http://skillattack.com/sa4/dancer_score.php?_=matrix&ddrcode=";
+    let url = format!("{}{}", base, ddr_code);
+
+    let webpage = http
+        .get(&url)
+        .send()
+        .await?
+        .text_with_charset("Shift_JIS")
+        .await?;
+    Ok(webpage)
+}
+
+fn get_scores_and_song_inner(
     webpage: &str,
     ddr_code: u32,
     get_songs: bool,
@@ -54,7 +83,7 @@ fn get_scores_and_song(
 
     let array_contents = [
         "ddIndex",
-        "ddMusic",
+        "dsMusic",
         "dsScoreGsp",
         "dsScoreBsp",
         "dsScoreDsp",
@@ -62,6 +91,7 @@ fn get_scores_and_song(
         "dsScoreCsp",
     ]
     .iter()
+    // .inspect(|name| println!("{}", name))
     .map(|name| webpage.find(name).unwrap())
     .map(|index| (&webpage[index..]).lines().next().unwrap())
     .map(|line| {
@@ -99,13 +129,14 @@ fn get_scores_and_song(
     };
     let mut song_names = if get_songs { Some(vec![]) } else { None };
 
+    println!("started loop");
     for (score_index, song_index) in song_indices_iter.enumerate() {
         let scores = SkillAttackScore {
-            beg_score: scores[score_index][0],
-            basic_score: scores[score_index][1],
-            diff_score: scores[score_index][2],
-            expert_score: scores[score_index][3],
-            chal_score: scores[score_index][4],
+            beg_score: scores[0][score_index],
+            basic_score: scores[1][score_index],
+            diff_score: scores[2][score_index],
+            expert_score: scores[3][score_index],
+            chal_score: scores[4][score_index],
         };
         user_scores.song_score.insert(song_index, scores);
 
@@ -120,6 +151,7 @@ fn get_scores_and_song(
             });
         }
     }
+    println!("ended loop");
 
     Ok((user_scores, song_names))
 }
