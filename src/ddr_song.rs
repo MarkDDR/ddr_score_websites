@@ -72,6 +72,12 @@ impl DDRSong {
                 sanbai_normalized.get(sanbai_index),
             ) {
                 (Some(a), Some(b)) => (a, b),
+                (None, Some((_, sanbai_song))) => {
+                    info!("Leftover song in sanbai: {}", sanbai_song.song_name);
+                    ddr_songs.push(Self::new_from_sanbai_and_skillattack(sanbai_song, None));
+                    sanbai_index += 1;
+                    continue;
+                }
                 _ => break,
             };
 
