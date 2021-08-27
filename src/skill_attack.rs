@@ -4,6 +4,7 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
+use tracing::info;
 
 type SkillAttackIndex = u16;
 
@@ -25,34 +26,36 @@ pub struct SkillAttackScore {
 #[derive(Debug, Clone)]
 pub struct UserScores {
     pub user_id: u32,
-    pub user_name: String,
+    pub username: String,
     pub song_score: HashMap<SkillAttackIndex, SkillAttackScore>,
 }
 
 pub async fn get_scores(http: Client, ddr_code: u32) -> Result<UserScores> {
     let webpage = get_skill_attack_webpage(http, ddr_code).await?;
-    let s_name_index = webpage
-        .find("sName")
-        .ok_or(anyhow::anyhow!("couldn't find thing in html"))?;
-    let webpage = &webpage[s_name_index..];
+    let webpage = cut_webpage(&webpage)?;
 
     let (user_scores, _) = get_scores_and_song_inner(webpage, ddr_code, false)?;
 
     Ok(user_scores)
 }
 
-pub async fn get_scores_and_song(
-    http: Client,
-    ddr_code: u32,
-) -> Result<(UserScores, Vec<SkillAttackSong>)> {
-    println!("Sent web request");
-    let webpage = get_skill_attack_webpage(http, ddr_code).await?;
+fn cut_webpage(webpage: &str) -> Result<&str> {
     let s_name_index = webpage
         .find("sName")
         .ok_or(anyhow::anyhow!("couldn't find thing in html"))?;
     let webpage = &webpage[s_name_index..];
+    Ok(webpage)
+}
 
-    println!("got webpage");
+pub async fn get_scores_and_song(
+    http: Client,
+    ddr_code: u32,
+) -> Result<(UserScores, Vec<SkillAttackSong>)> {
+    info!("Sent SA web request");
+    let webpage = get_skill_attack_webpage(http, ddr_code).await?;
+    let webpage = cut_webpage(&webpage)?;
+
+    info!("got SA webpage");
     let (user_scores, songs) = get_scores_and_song_inner(webpage, ddr_code, true)?;
 
     Ok((user_scores, songs.expect("Unexpectedly None")))
@@ -122,14 +125,26 @@ fn get_scores_and_song_inner(
         })
         .collect();
 
+    let username = {
+        let username_index = webpage.find("sName").unwrap();
+        let username_line = (&webpage[username_index..]).lines().next().unwrap();
+        QUOTED_TEXT
+            .captures(username_line)
+            .unwrap()
+            .name("text")
+            .unwrap()
+            .as_str()
+            .to_string()
+    };
+
     let mut user_scores = UserScores {
         user_id: ddr_code,
-        user_name: "Bob".to_string(),
+        username,
         song_score: HashMap::new(),
     };
     let mut song_names = if get_songs { Some(vec![]) } else { None };
 
-    println!("started loop");
+    info!("Started parsing SA songs");
     for (score_index, song_index) in song_indices_iter.enumerate() {
         let scores = SkillAttackScore {
             beg_score: scores[0][score_index],
@@ -151,7 +166,7 @@ fn get_scores_and_song_inner(
             });
         }
     }
-    println!("ended loop");
+    info!("Finished parsing SA songs");
 
     Ok((user_scores, song_names))
 }

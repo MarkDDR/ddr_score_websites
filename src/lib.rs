@@ -1,3 +1,4 @@
+pub mod ddr_song;
 pub mod sanbai;
 pub mod skill_attack;
 
