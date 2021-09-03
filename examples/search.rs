@@ -1,6 +1,3 @@
-use std::iter::FromIterator;
-use std::str::FromStr;
-
 use anyhow::Result;
 use score_websites::ddr_song::{parse_search_query, search_by_title, Chart, DDRSong, SearchInfo};
 use score_websites::sanbai;
@@ -68,10 +65,12 @@ async fn main() -> Result<()> {
                     for (index, &rating) in result.ratings.0.iter().enumerate() {
                         if rating == l {
                             diff_index = Some(index);
+                            break;
                         }
                     }
                     let diff_index = diff_index.expect("This should be impossible");
-                    let chart = Chart::from_index(diff_index);
+                    let chart =
+                        Chart::from_index(diff_index).expect("This should be even more impossible");
                     println!("{} {:?} {}", result.song_name, chart, l);
                 }
                 _ => unreachable!("This shouldn't happen"),
@@ -84,63 +83,6 @@ async fn main() -> Result<()> {
     }
 
     // Ok(())
-}
-
-#[derive(Debug, Copy, Clone)]
-enum DifficultyOrLevel {
-    GSP,
-    BSP,
-    DSP,
-    ESP,
-    CSP,
-    Level(u8),
-}
-
-impl FromStr for DifficultyOrLevel {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use DifficultyOrLevel::*;
-        match s {
-            "gsp" => Ok(GSP),
-            "bsp" => Ok(BSP),
-            "dsp" => Ok(DSP),
-            "esp" => Ok(ESP),
-            "csp" => Ok(CSP),
-            _ => {
-                if let Ok(level) = s.parse::<u8>() {
-                    if level < 20 {
-                        return Ok(Level(level));
-                    }
-                }
-                Err(())
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum LastTwo<T> {
-    None,
-    One(T),
-    Two(T, T),
-}
-
-impl<T> FromIterator<T> for LastTwo<T> {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut iter = iter.into_iter();
-        let (mut a, mut b) = (None, None);
-        while let Some(x) = iter.next() {
-            a = b;
-            b = Some(x);
-        }
-        match (a, b) {
-            (None, None) => Self::None,
-            (None, Some(one)) => Self::One(one),
-            (Some(one), Some(two)) => Self::Two(one, two),
-            (Some(_), None) => unreachable!(),
-        }
-    }
 }
 
 fn setup() {
