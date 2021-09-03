@@ -6,7 +6,7 @@ use regex::Regex;
 use reqwest::Client;
 use tracing::info;
 
-type SkillAttackIndex = u16;
+pub type SkillAttackIndex = u16;
 
 #[derive(Debug, Clone)]
 pub struct SkillAttackSong {
@@ -111,7 +111,7 @@ fn get_scores_and_song_inner(
         .split(',')
         .map(|s| s.parse::<SkillAttackIndex>().unwrap());
     let mut song_names_iter = QUOTED_TEXT
-        .captures_iter(&array_contents[1])
+        .captures_iter(array_contents[1])
         .map(|cap| cap.name("text").unwrap().as_str())
         .map(|s| decode_html_escapes(s).into_owned());
     let scores: Vec<_> = (&array_contents[2..])
@@ -160,7 +160,7 @@ fn get_scores_and_song_inner(
             song_names = song_names.map(|mut v| {
                 v.push(SkillAttackSong {
                     skill_attack_index: song_index,
-                    song_name: song_name,
+                    song_name,
                 });
                 v
             });

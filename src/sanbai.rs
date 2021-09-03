@@ -13,7 +13,7 @@ pub async fn get_sanbai_song_data(http: Client) -> Result<Vec<SanbaiSong>> {
     let songdata_js = songdata_js
         .strip_prefix("var ALL_SONG_DATA=")
         .ok_or(anyhow!("missing `ALL_SONG_DATA` prefix"))?
-        .strip_suffix(";")
+        .strip_suffix(';')
         .ok_or(anyhow!("missing `;` suffix"))?;
 
     info!("Sanbai parse start");
@@ -35,6 +35,8 @@ where
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SanbaiSong {
+    // TODO make a `SanbaiId([u8; 24])` type that decodes the raw `String` with base64
+    // base64::decode_config(<string form of song_id>, base64::STANDARD_NO_PAD)
     pub song_id: String,
     pub song_name: String,
     pub alternate_name: Option<String>,
@@ -124,6 +126,20 @@ impl fmt::Display for DDRVersion {
 
 #[derive(Debug, Copy, Clone, Deserialize)]
 pub struct Difficulties(pub [u8; 9]);
+
+impl Difficulties {
+    pub fn contains_single(&self, difficulty: u8) -> bool {
+        self.0[0..5].contains(&difficulty)
+    }
+
+    pub fn has_single_challenge(&self) -> bool {
+        self.0[4] > 0
+    }
+
+    pub fn has_non_challenge(&self) -> bool {
+        self.0[0] > 0
+    }
+}
 
 #[derive(Debug, Copy, Clone, Deserialize)]
 pub struct LockTypes(pub [i32; 9]);
