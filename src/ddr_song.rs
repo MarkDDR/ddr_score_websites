@@ -1,3 +1,6 @@
+use std::iter::FromIterator;
+use std::str::FromStr;
+
 use tracing::info;
 
 use crate::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
@@ -108,7 +111,7 @@ impl DDRSong {
                 std::cmp::Ordering::Greater => {
                     // only in sanbai, add to vec
                     // usually this means it is a newer song not yet added to SA
-                    info!("Only in Sanbai, adding: {}", sanbai_candidate.1.song_name);
+                    // info!("Only in Sanbai, adding: {}", sanbai_candidate.1.song_name);
                     ddr_songs.push(Self::new_from_sanbai_and_skillattack(
                         sanbai_candidate.1,
                         None,
@@ -129,6 +132,206 @@ impl DDRSong {
         }
 
         ddr_songs
+    }
+}
+
+pub fn parse_search_query<'query, 'ddr_song>(
+    song_list: impl IntoIterator<Item = &'ddr_song DDRSong> + 'ddr_song,
+    query: &'query str,
+) -> Option<(
+    SearchInfo<'query>,
+    Box<dyn Iterator<Item = &'ddr_song DDRSong> + 'ddr_song>,
+)> {
+    let last_two_params: LastTwo<&str> = query.split_whitespace().skip(1).collect();
+    let filter: Box<dyn Iterator<Item = &'ddr_song DDRSong>>;
+    // let search_title: &str = "TODO";
+    let search_info;
+    match last_two_params {
+        LastTwo::None => return None,
+        LastTwo::One(one) => match one.parse::<DifficultyOrLevel>() {
+            Ok(dol) => {
+                let search_title_offset = one.as_ptr() as usize - query.as_ptr() as usize;
+                let search_title = &query[..search_title_offset];
+                filter = dol.apply_filter(song_list);
+                search_info = SearchInfo::new_title(search_title, dol, None);
+            }
+            Err(_) => return None,
+        },
+        LastTwo::Two(one, two) => {
+            match (
+                one.parse::<DifficultyOrLevel>(),
+                two.parse::<DifficultyOrLevel>(),
+            ) {
+                (
+                    Ok(one_dol @ DifficultyOrLevel::Difficulty(_)),
+                    Ok(two_dol @ DifficultyOrLevel::Level(_)),
+                )
+                | (
+                    Ok(one_dol @ DifficultyOrLevel::Level(_)),
+                    Ok(two_dol @ DifficultyOrLevel::Difficulty(_)),
+                ) => {
+                    // filter by chart and level
+                    let search_title_offset = one.as_ptr() as usize - query.as_ptr() as usize;
+                    let search_title = &query[..search_title_offset];
+                    let one_filter = one_dol.apply_filter(song_list);
+                    filter = two_dol.apply_filter(one_filter);
+                    search_info = SearchInfo::new_title(search_title, one_dol, Some(two_dol))
+                }
+                (
+                    Ok(DifficultyOrLevel::Difficulty(_)),
+                    Ok(dol @ DifficultyOrLevel::Difficulty(_)),
+                )
+                | (Err(_), Ok(dol @ DifficultyOrLevel::Difficulty(_)))
+                | (Ok(DifficultyOrLevel::Level(_)), Ok(dol @ DifficultyOrLevel::Level(_)))
+                | (Err(_), Ok(dol @ DifficultyOrLevel::Level(_))) => {
+                    // ignore one, filter two
+                    let search_title_offset = two.as_ptr() as usize - query.as_ptr() as usize;
+                    let search_title = &query[..search_title_offset];
+                    filter = dol.apply_filter(song_list);
+                    search_info = SearchInfo::new_title(search_title, dol, None);
+                }
+                _ => return None,
+            }
+        }
+    }
+    Some((search_info, filter))
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct SearchInfo<'a> {
+    pub search_title: &'a str,
+    pub chart: Option<Chart>,
+    pub level: Option<u8>,
+}
+
+impl<'a> SearchInfo<'a> {
+    fn new_title(
+        search_title: &'a str,
+        one: DifficultyOrLevel,
+        two: Option<DifficultyOrLevel>,
+    ) -> Self {
+        let mut chart = None;
+        let mut level = None;
+        match one {
+            DifficultyOrLevel::Difficulty(c) => chart = Some(c),
+            DifficultyOrLevel::Level(l) => level = Some(l),
+        }
+        match two {
+            Some(DifficultyOrLevel::Difficulty(c)) => chart = Some(c),
+            Some(DifficultyOrLevel::Level(l)) => level = Some(l),
+            None => {}
+        }
+
+        Self {
+            search_title: search_title.trim(),
+            chart,
+            level,
+        }
+    }
+
+    pub fn search_title(&self) -> &'a str {
+        match self {
+            Self { search_title, .. } => search_title,
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Copy, Clone)]
+pub enum Chart {
+    GSP,
+    BSP,
+    DSP,
+    ESP,
+    CSP,
+}
+
+impl Chart {
+    pub fn is_challenge(&self) -> bool {
+        matches!(self, Chart::CSP)
+    }
+
+    pub fn from_index(index: usize) -> Option<Self> {
+        Some(match index {
+            0 => Self::GSP,
+            1 => Self::BSP,
+            2 => Self::DSP,
+            3 => Self::ESP,
+            4 => Self::CSP,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum DifficultyOrLevel {
+    Difficulty(Chart),
+    Level(u8),
+}
+
+impl DifficultyOrLevel {
+    fn apply_filter<'a>(
+        self,
+        song_list: impl IntoIterator<Item = &'a DDRSong> + 'a,
+    ) -> Box<dyn Iterator<Item = &'a DDRSong> + 'a> {
+        match self {
+            DifficultyOrLevel::Difficulty(Chart::CSP) => {
+                Box::new(filter_by_has_challenge(song_list))
+            }
+            // _ => todo!(),
+            DifficultyOrLevel::Difficulty(_) => Box::new(filter_by_has_non_challenge(song_list)),
+            DifficultyOrLevel::Level(level) => {
+                Box::new(filter_by_single_difficulty(song_list, level))
+            }
+        }
+    }
+}
+
+impl FromStr for DifficultyOrLevel {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use Chart::*;
+        use DifficultyOrLevel::*;
+        match s {
+            "gsp" => Ok(Difficulty(GSP)),
+            "bsp" => Ok(Difficulty(BSP)),
+            "dsp" => Ok(Difficulty(DSP)),
+            "esp" => Ok(Difficulty(ESP)),
+            "csp" => Ok(Difficulty(CSP)),
+            _ => {
+                if let Ok(level) = s.parse::<u8>() {
+                    if level < 20 {
+                        return Ok(Level(level));
+                    }
+                }
+                Err(())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LastTwo<T> {
+    None,
+    One(T),
+    Two(T, T),
+}
+
+impl<T> FromIterator<T> for LastTwo<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let mut iter = iter.into_iter();
+        let (mut a, mut b) = (None, None);
+        while let Some(x) = iter.next() {
+            a = b;
+            b = Some(x);
+        }
+        match (a, b) {
+            (None, None) => Self::None,
+            (None, Some(one)) => Self::One(one),
+            (Some(one), Some(two)) => Self::Two(one, two),
+            (Some(_), None) => unreachable!(),
+        }
     }
 }
 

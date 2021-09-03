@@ -2,10 +2,7 @@ use std::iter::FromIterator;
 use std::str::FromStr;
 
 use anyhow::Result;
-use score_websites::ddr_song::{
-    filter_by_has_challenge, filter_by_has_non_challenge, filter_by_single_difficulty,
-    search_by_title, DDRSong,
-};
+use score_websites::ddr_song::{parse_search_query, search_by_title, Chart, DDRSong, SearchInfo};
 use score_websites::sanbai;
 use score_websites::skill_attack;
 use tracing_subscriber::EnvFilter;
@@ -31,41 +28,55 @@ async fn main() -> Result<()> {
             .expect("Couldn't read line");
         let search = input.trim();
 
-        // let potential_params: LastTwo<&str> = search.split_whitespace().skip(1).collect();
+        let (search_info, filter) = match parse_search_query(&ddr_songs, search) {
+            Some(x) => x,
+            _ => {
+                println!("Please input difficulty");
+                continue;
+            }
+        };
 
-        // let mut level_filter;
-        // let mut challenge_filter;
-        // let mut non_challenge_filter;
-        // let search_filter: &mut dyn Iterator<Item = _> = match potential_params {
-        //     LastTwo::None => {
-        //         println!("Please provide difficulty");
-        //         continue;
-        //     }
-        //     LastTwo::One(a) => match a.parse::<DifficultyOrLevel>() {
-        //         Ok(DifficultyOrLevel::Level(x)) => {
-        //             level_filter = filter_by_single_difficulty(&ddr_songs, x);
-        //             &mut level_filter
-        //         }
-        //         Ok(DifficultyOrLevel::CSP) => {
-        //             challenge_filter = filter_by_has_challenge(&ddr_songs);
-        //             &mut challenge_filter
-        //         }
-        //         Ok(_) => {
-        //             non_challenge_filter = filter_by_has_non_challenge(&ddr_songs);
-        //             &mut non_challenge_filter
-        //         }
-        //         Err(_) => {
-        //             println!("Please provide difficulty");
-        //             continue;
-        //         }
-        //     },
-        //     LastTwo::Two(_, _) => todo!(),
-        // };
-
-        let search_result = search_by_title(&ddr_songs, &search);
+        let search_result = search_by_title(filter, search_info.search_title());
         // let search_result = search_by_title(search_filter, &search);
 
         if let Some(result) = search_result {
+            match search_info {
+                SearchInfo {
+                    chart: Some(c),
+                    level: Some(l),
+                    ..
+                } => {
+                    println!("{} {:?} {}", result.song_name, c, l);
+                }
+                SearchInfo {
+                    chart: Some(c),
+                    level: None,
+                    ..
+                } => {
+                    // select the corresponding chart
+                    let chart_index = c as usize;
+                    let level = result.ratings.0[chart_index];
+                    println!("{} {:?} {}", result.song_name, c, level);
+                }
+                SearchInfo {
+                    chart: None,
+                    level: Some(l),
+                    ..
+                } => {
+                    // select corresponding rating
+                    let mut diff_index = None;
+                    for (index, &rating) in result.ratings.0.iter().enumerate() {
+                        if rating == l {
+                            diff_index = Some(index);
+                        }
+                    }
+                    let diff_index = diff_index.expect("This should be impossible");
+                    let chart = Chart::from_index(diff_index);
+                    println!("{} {:?} {}", result.song_name, chart, l);
+                }
+                _ => unreachable!("This shouldn't happen"),
+            }
+            // println!("{} {} {}", result.song_name, search_info.)
             println!("{:#?}", result.search_names);
         } else {
             println!("None");
@@ -75,6 +86,7 @@ async fn main() -> Result<()> {
     // Ok(())
 }
 
+#[derive(Debug, Copy, Clone)]
 enum DifficultyOrLevel {
     GSP,
     BSP,
