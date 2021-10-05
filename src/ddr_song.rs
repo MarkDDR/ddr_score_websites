@@ -6,8 +6,7 @@ use tracing::info;
 use crate::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
 use crate::skill_attack::{SkillAttackIndex, SkillAttackSong};
 
-#[derive(Debug, Clone)]
-pub struct PlayerScores {}
+pub type SongId = String;
 
 #[derive(Debug, Clone)]
 pub struct DDRSong {
@@ -22,7 +21,6 @@ pub struct DDRSong {
     pub ratings: Difficulties,
     // Lock condition, i.e. Extra Savior, Golden League, Unlock Event, etc.
     pub lock_types: Option<LockTypes>,
-    // pub scores: Vec<PlayerScores>,
 }
 
 impl DDRSong {

@@ -1,20 +1,68 @@
 use anyhow::Result;
+use futures::stream::FuturesUnordered;
 use score_websites::ddr_song::{parse_search_query, search_by_title, Chart, DDRSong, SearchInfo};
-use score_websites::sanbai;
+use score_websites::sanbai::{self, get_sanbai_song_data};
+use score_websites::scores::Player;
 use score_websites::skill_attack;
+use tokio_stream::StreamExt;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     setup();
-    let http = reqwest::Client::new();
+    let http = score_websites::Client::new();
     let ddr_code = 51527130;
-    let ((_user, sa_songs), sanbai_songs) = tokio::try_join!(
-        skill_attack::get_scores_and_song(http.clone(), ddr_code),
-        sanbai::get_sanbai_song_data(http.clone())
+
+    // TODO grab the scores and present them in the search results
+    let users = [
+        (51527130, "MARK"),
+        (51546306, "TSWIFT"),
+        (61578951, "YOSHI"),
+        (61573431, "CERULEAN"),
+        (51527333, "KDUBS"),
+        (51545388, "HAPPY HR"),
+    ];
+
+    // split users into two futures
+    //   - one to get scores and songs from first user
+    //   - other to get just scores from the rest of the users
+    let (first_user, other_users) = users.split_first().unwrap();
+    let sa_songs_and_scores =
+        skill_attack::get_scores_and_song_data(http.clone(), first_user.1.to_owned(), first_user.0);
+    let other_user_scores = async {
+        let mut futures_unordered: FuturesUnordered<_> = other_users
+            .iter()
+            .copied()
+            .map(|(ddr_code, username)| {
+                skill_attack::get_scores(http.clone(), username.to_owned(), ddr_code)
+            })
+            .collect();
+        let mut scores = vec![];
+        while let Some(score) = futures_unordered.try_next().await? {
+            scores.push(score);
+        }
+
+        Result::<_, anyhow::Error>::Ok(scores)
+    };
+
+    let (sanbai_songs, (first_user_scores, sa_songs), other_user_scores) = tokio::try_join!(
+        get_sanbai_song_data(http.clone()),
+        sa_songs_and_scores,
+        other_user_scores,
     )?;
+    // let ((_user, sa_songs), sanbai_songs) = tokio::try_join!(
+    //     skill_attack::get_scores_and_song_data(http.clone(), "MARK".to_string(), ddr_code),
+    //     sanbai::get_sanbai_song_data(http.clone())
+    // )?;
 
     let ddr_songs = DDRSong::from_combining_song_lists(&sanbai_songs, &sa_songs);
+
+    let user_scores: Vec<_> = std::iter::once(first_user_scores)
+        .chain(other_user_scores.into_iter())
+        .map(|sa_score| Player::from_sa_scores(&sa_score, &ddr_songs))
+        .collect();
+
+    // TODO Display user scores with results
 
     let mut input = String::new();
     loop {
@@ -36,6 +84,7 @@ async fn main() -> Result<()> {
         let search_result = search_by_title(filter, search_info.search_title());
         // let search_result = search_by_title(search_filter, &search);
 
+        // TODO add a convenience method to automagically fetch song name, difficulty name (chart), and level
         if let Some(result) = search_result {
             match search_info {
                 SearchInfo {

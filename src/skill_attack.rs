@@ -6,6 +6,8 @@ use regex::Regex;
 use reqwest::Client;
 use tracing::info;
 
+use crate::scores::Scores;
+
 pub type SkillAttackIndex = u16;
 
 #[derive(Debug, Clone)]
@@ -14,27 +16,24 @@ pub struct SkillAttackSong {
     pub song_name: String,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct SkillAttackScore {
-    pub beg_score: Option<u32>,
-    pub basic_score: Option<u32>,
-    pub diff_score: Option<u32>,
-    pub expert_score: Option<u32>,
-    pub chal_score: Option<u32>,
-}
-
 #[derive(Debug, Clone)]
-pub struct UserScores {
-    pub user_id: u32,
+pub struct SkillAttackScores {
+    pub ddr_code: u32,
     pub username: String,
-    pub song_score: HashMap<SkillAttackIndex, SkillAttackScore>,
+    pub song_score: HashMap<SkillAttackIndex, Scores>,
 }
 
-pub async fn get_scores(http: Client, ddr_code: u32) -> Result<UserScores> {
+pub async fn get_scores(
+    http: Client,
+    username: String,
+    ddr_code: u32,
+) -> Result<SkillAttackScores> {
+    info!("Sent SA web request");
     let webpage = get_skill_attack_webpage(http, ddr_code).await?;
     let webpage = cut_webpage(&webpage)?;
+    info!("got SA webpage");
 
-    let (user_scores, _) = get_scores_and_song_inner(webpage, ddr_code, false)?;
+    let (user_scores, _) = get_scores_and_song_inner(webpage, false, username, ddr_code)?;
 
     Ok(user_scores)
 }
@@ -47,16 +46,17 @@ fn cut_webpage(webpage: &str) -> Result<&str> {
     Ok(webpage)
 }
 
-pub async fn get_scores_and_song(
+pub async fn get_scores_and_song_data(
     http: Client,
+    username: String,
     ddr_code: u32,
-) -> Result<(UserScores, Vec<SkillAttackSong>)> {
+) -> Result<(SkillAttackScores, Vec<SkillAttackSong>)> {
     info!("Sent SA web request");
     let webpage = get_skill_attack_webpage(http, ddr_code).await?;
     let webpage = cut_webpage(&webpage)?;
-
     info!("got SA webpage");
-    let (user_scores, songs) = get_scores_and_song_inner(webpage, ddr_code, true)?;
+
+    let (user_scores, songs) = get_scores_and_song_inner(webpage, true, username, ddr_code)?;
 
     Ok((user_scores, songs.expect("Unexpectedly None")))
 }
@@ -76,9 +76,10 @@ async fn get_skill_attack_webpage(http: Client, ddr_code: u32) -> Result<String>
 
 fn get_scores_and_song_inner(
     webpage: &str,
-    ddr_code: u32,
     get_songs: bool,
-) -> Result<(UserScores, Option<Vec<SkillAttackSong>>)> {
+    username: String,
+    ddr_code: u32,
+) -> Result<(SkillAttackScores, Option<Vec<SkillAttackSong>>)> {
     lazy_static! {
         static ref INSIDE_ARRAY: Regex = Regex::new(r"Array\((.+)\);$").unwrap();
         static ref QUOTED_TEXT: Regex = Regex::new(r"'(?P<text>(?:[^'\\]|\\.)*)'").unwrap();
@@ -125,34 +126,36 @@ fn get_scores_and_song_inner(
         })
         .collect();
 
-    let username = {
-        let username_index = webpage.find("sName").unwrap();
-        let username_line = (&webpage[username_index..]).lines().next().unwrap();
-        QUOTED_TEXT
-            .captures(username_line)
-            .unwrap()
-            .name("text")
-            .unwrap()
-            .as_str()
-            .to_string()
-    };
+    // let username = {
+    //     let username_index = webpage.find("sName").unwrap();
+    //     let username_line = (&webpage[username_index..]).lines().next().unwrap();
+    //     QUOTED_TEXT
+    //         .captures(username_line)
+    //         .unwrap()
+    //         .name("text")
+    //         .unwrap()
+    //         .as_str()
+    //         .to_string()
+    // };
 
-    let mut user_scores = UserScores {
-        user_id: ddr_code,
+    let mut user_scores = SkillAttackScores {
+        ddr_code,
         username,
         song_score: HashMap::new(),
     };
+    // let mut user_scores = SkillAttackScores(HashMap::new());
     let mut song_names = if get_songs { Some(vec![]) } else { None };
 
     info!("Started parsing SA songs");
     for (score_index, song_index) in song_indices_iter.enumerate() {
-        let scores = SkillAttackScore {
+        let scores = Scores {
             beg_score: scores[0][score_index],
             basic_score: scores[1][score_index],
             diff_score: scores[2][score_index],
             expert_score: scores[3][score_index],
             chal_score: scores[4][score_index],
         };
+        // user_scores.song_score.insert(song_index, scores);
         user_scores.song_score.insert(song_index, scores);
 
         if get_songs {
