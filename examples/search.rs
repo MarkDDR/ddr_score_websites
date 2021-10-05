@@ -1,7 +1,10 @@
+use std::cmp::Reverse;
+
 use anyhow::Result;
 use futures::stream::FuturesUnordered;
+use num_format::{Locale, ToFormattedString};
 use score_websites::ddr_song::{parse_search_query, search_by_title, Chart, DDRSong, SearchInfo};
-use score_websites::sanbai::{self, get_sanbai_song_data};
+use score_websites::sanbai::get_sanbai_song_data;
 use score_websites::scores::Player;
 use score_websites::skill_attack;
 use tokio_stream::StreamExt;
@@ -11,7 +14,6 @@ use tracing_subscriber::EnvFilter;
 async fn main() -> Result<()> {
     setup();
     let http = score_websites::Client::new();
-    let ddr_code = 51527130;
 
     // TODO grab the scores and present them in the search results
     let users = [
@@ -50,10 +52,6 @@ async fn main() -> Result<()> {
         sa_songs_and_scores,
         other_user_scores,
     )?;
-    // let ((_user, sa_songs), sanbai_songs) = tokio::try_join!(
-    //     skill_attack::get_scores_and_song_data(http.clone(), "MARK".to_string(), ddr_code),
-    //     sanbai::get_sanbai_song_data(http.clone())
-    // )?;
 
     let ddr_songs = DDRSong::from_combining_song_lists(&sanbai_songs, &sa_songs);
 
@@ -84,7 +82,7 @@ async fn main() -> Result<()> {
         let search_result = search_by_title(filter, search_info.search_title());
         // let search_result = search_by_title(search_filter, &search);
 
-        // TODO add a convenience method to automagically fetch song name, difficulty name (chart), and level
+        let diff_index;
         if let Some(result) = search_result {
             match search_info {
                 SearchInfo {
@@ -92,6 +90,7 @@ async fn main() -> Result<()> {
                     level: Some(l),
                     ..
                 } => {
+                    diff_index = c as usize;
                     println!("{} {:?} {}", result.song_name, c, l);
                 }
                 SearchInfo {
@@ -100,6 +99,7 @@ async fn main() -> Result<()> {
                     ..
                 } => {
                     // select the corresponding chart
+                    diff_index = c as usize;
                     let chart_index = c as usize;
                     let level = result.ratings.0[chart_index];
                     println!("{} {:?} {}", result.song_name, c, level);
@@ -110,22 +110,44 @@ async fn main() -> Result<()> {
                     ..
                 } => {
                     // select corresponding rating
-                    let mut diff_index = None;
+                    let mut chart_index = None;
                     for (index, &rating) in result.ratings.0.iter().enumerate() {
                         if rating == l {
-                            diff_index = Some(index);
+                            chart_index = Some(index);
                             break;
                         }
                     }
-                    let diff_index = diff_index.expect("This should be impossible");
-                    let chart =
-                        Chart::from_index(diff_index).expect("This should be even more impossible");
+                    let chart_index = chart_index.expect("This should be impossible");
+                    diff_index = chart_index;
+                    let chart = Chart::from_index(chart_index)
+                        .expect("This should be even more impossible");
                     println!("{} {:?} {}", result.song_name, chart, l);
                 }
                 _ => unreachable!("This shouldn't happen"),
             }
-            // println!("{} {} {}", result.song_name, search_info.)
             println!("{:#?}", result.search_names);
+
+            let mut user_song_scores = user_scores
+                .iter()
+                .map(|p| {
+                    (
+                        p.ddr_code,
+                        &p.name,
+                        p.scores
+                            .get(&result.song_id)
+                            .and_then(|score| score.get_by_index(diff_index)),
+                    )
+                })
+                .collect::<Vec<_>>();
+            user_song_scores.sort_by_key(|(_, _, score)| Reverse(*score));
+            for (code, name, score) in user_song_scores {
+                let score_str = match score {
+                    None => "-".to_string(),
+                    Some(s) => s.to_formatted_string(&Locale::en),
+                };
+                println!("{} | {:8} | {:>9}", code, name, score_str);
+            }
+            // println!("{:#?}", user_song_scores);
         } else {
             println!("None");
         }

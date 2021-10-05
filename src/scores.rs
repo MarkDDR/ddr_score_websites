@@ -14,6 +14,19 @@ pub struct Scores {
     pub chal_score: Option<u32>,
 }
 
+impl Scores {
+    pub fn get_by_index(&self, index: usize) -> Option<u32> {
+        match index {
+            0 => self.beg_score,
+            1 => self.basic_score,
+            2 => self.diff_score,
+            3 => self.expert_score,
+            4 => self.chal_score,
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Player {
     pub name: String,
