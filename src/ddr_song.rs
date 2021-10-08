@@ -3,8 +3,8 @@ use std::str::FromStr;
 
 use tracing::info;
 
-use crate::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
-use crate::skill_attack::{SkillAttackIndex, SkillAttackSong};
+use crate::score_websites::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
+use crate::score_websites::skill_attack::{SkillAttackIndex, SkillAttackSong};
 
 pub type SongId = String;
 

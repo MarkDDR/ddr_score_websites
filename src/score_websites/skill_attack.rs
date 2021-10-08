@@ -6,7 +6,7 @@ use regex::Regex;
 use reqwest::Client;
 use tracing::info;
 
-use crate::scores::Scores;
+use crate::scores::{ComboType, ScoreCombo, Scores};
 
 pub type SkillAttackIndex = u16;
 
@@ -81,7 +81,11 @@ fn get_scores_and_song_inner(
     ddr_code: u32,
 ) -> Result<(SkillAttackScores, Option<Vec<SkillAttackSong>>)> {
     lazy_static! {
+        // A regex that extracts the inside of an Array
+        // e.g. "blah blah = new Array(inside part);" will give "inside part"
         static ref INSIDE_ARRAY: Regex = Regex::new(r"Array\((.+)\);$").unwrap();
+        // A regex that captures each item that is in single quotes, accounting for escaped single quotes
+        // e.g. "'abcd', 'ef\'gh'" will give captures of "abcd" and "ef\'gh"
         static ref QUOTED_TEXT: Regex = Regex::new(r"'(?P<text>(?:[^'\\]|\\.)*)'").unwrap();
     }
 
@@ -93,6 +97,11 @@ fn get_scores_and_song_inner(
         "dsScoreDsp",
         "dsScoreEsp",
         "dsScoreCsp",
+        "ddFcGsp",
+        "ddFcBsp",
+        "ddFcDsp",
+        "ddFcEsp",
+        "ddFcCsp",
     ]
     .iter()
     // .inspect(|name| println!("{}", name))
@@ -115,14 +124,22 @@ fn get_scores_and_song_inner(
         .captures_iter(array_contents[1])
         .map(|cap| cap.name("text").unwrap().as_str())
         .map(|s| decode_html_escapes(s).into_owned());
-    let scores: Vec<_> = (&array_contents[2..])
+    let mut scores: Vec<_> = (&array_contents[2..7])
         .iter()
         .map(|s| {
             QUOTED_TEXT
                 .captures_iter(s)
                 .map(|cap| cap.name("text").unwrap().as_str())
                 .map(|s| parse_number_with_commas(s))
-                .collect::<Vec<_>>()
+        })
+        .collect();
+    let mut combo_types: Vec<_> = (&array_contents[7..])
+        .iter()
+        .map(|s| {
+            s.split(',').map(|num_str| {
+                let combo_index = num_str.parse::<u8>().expect("non number in combo text");
+                ComboType::from_skill_attack_index(combo_index).unwrap()
+            })
         })
         .collect();
 
@@ -147,15 +164,30 @@ fn get_scores_and_song_inner(
     let mut song_names = if get_songs { Some(vec![]) } else { None };
 
     info!("Started parsing SA songs");
-    for (score_index, song_index) in song_indices_iter.enumerate() {
+    for song_index in song_indices_iter {
+        // TODO make this cleaner
         let scores = Scores {
-            beg_score: scores[0][score_index],
-            basic_score: scores[1][score_index],
-            diff_score: scores[2][score_index],
-            expert_score: scores[3][score_index],
-            chal_score: scores[4][score_index],
+            beg_score: scores[0].next().unwrap().map(|s| ScoreCombo {
+                score: s,
+                combo: combo_types[0].next().unwrap(),
+            }),
+            basic_score: scores[1].next().unwrap().map(|s| ScoreCombo {
+                score: s,
+                combo: combo_types[1].next().unwrap(),
+            }),
+            diff_score: scores[2].next().unwrap().map(|s| ScoreCombo {
+                score: s,
+                combo: combo_types[2].next().unwrap(),
+            }),
+            expert_score: scores[3].next().unwrap().map(|s| ScoreCombo {
+                score: s,
+                combo: combo_types[3].next().unwrap(),
+            }),
+            chal_score: scores[4].next().unwrap().map(|s| ScoreCombo {
+                score: s,
+                combo: combo_types[4].next().unwrap(),
+            }),
         };
-        // user_scores.song_score.insert(song_index, scores);
         user_scores.song_score.insert(song_index, scores);
 
         if get_songs {

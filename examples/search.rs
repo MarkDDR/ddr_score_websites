@@ -4,9 +4,9 @@ use anyhow::Result;
 use futures::stream::FuturesUnordered;
 use num_format::{Locale, ToFormattedString};
 use score_websites::ddr_song::{parse_search_query, search_by_title, Chart, DDRSong, SearchInfo};
-use score_websites::sanbai::get_sanbai_song_data;
+use score_websites::score_websites::sanbai::{get_sanbai_scores, get_sanbai_song_data};
+use score_websites::score_websites::skill_attack;
 use score_websites::scores::Player;
-use score_websites::skill_attack;
 use tokio_stream::StreamExt;
 use tracing_subscriber::EnvFilter;
 
@@ -15,7 +15,10 @@ async fn main() -> Result<()> {
     setup();
     let http = score_websites::Client::new();
 
-    // TODO grab the scores and present them in the search results
+    let scores = get_sanbai_scores(http.clone(), "werecat").await?;
+    println!("{:#?}", scores);
+    todo!();
+
     let users = [
         (51527130, "MARK"),
         (51546306, "TSWIFT"),
@@ -36,12 +39,16 @@ async fn main() -> Result<()> {
             .iter()
             .copied()
             .map(|(ddr_code, username)| {
-                skill_attack::get_scores(http.clone(), username.to_owned(), ddr_code)
+                tokio::spawn(skill_attack::get_scores(
+                    http.clone(),
+                    username.to_owned(),
+                    ddr_code,
+                ))
             })
             .collect();
         let mut scores = vec![];
         while let Some(score) = futures_unordered.try_next().await? {
-            scores.push(score);
+            scores.push(score?);
         }
 
         Result::<_, anyhow::Error>::Ok(scores)
@@ -59,8 +66,6 @@ async fn main() -> Result<()> {
         .chain(other_user_scores.into_iter())
         .map(|sa_score| Player::from_sa_scores(&sa_score, &ddr_songs))
         .collect();
-
-    // TODO Display user scores with results
 
     let mut input = String::new();
     loop {
@@ -135,7 +140,7 @@ async fn main() -> Result<()> {
                         &p.name,
                         p.scores
                             .get(&result.song_id)
-                            .and_then(|score| score.get_by_index(diff_index)),
+                            .and_then(|score| score.get_score_by_index(diff_index)),
                     )
                 })
                 .collect::<Vec<_>>();

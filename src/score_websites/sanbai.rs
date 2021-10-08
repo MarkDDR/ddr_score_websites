@@ -5,6 +5,8 @@ use serde_repr::Deserialize_repr;
 use std::fmt;
 use tracing::info;
 
+use crate::{ddr_song::SongId, scores::ComboType};
+
 pub async fn get_sanbai_song_data(http: Client) -> Result<Vec<SanbaiSong>> {
     let url = "https://3icecream.com/js/songdata.js";
     info!("Sent Sanbai web request");
@@ -37,7 +39,7 @@ where
 pub struct SanbaiSong {
     // TODO make a `SanbaiId([u8; 24])` type that decodes the raw `String` with base64
     // base64::decode_config(<string form of song_id>, base64::STANDARD_NO_PAD)
-    pub song_id: String,
+    pub song_id: SongId,
     pub song_name: String,
     pub alternate_name: Option<String>,
     pub romanized_name: Option<String>,
@@ -143,3 +145,78 @@ impl Difficulties {
 
 #[derive(Debug, Copy, Clone, Deserialize)]
 pub struct LockTypes(pub [i32; 9]);
+
+// TODO sanbai scores
+// we can get the scores of a user by sending a POST request to
+// https://3icecream.com/api/follow_scores
+// with the following json
+// {
+//   //SP_or_DP: 0
+//   username: "sanbai_username"
+// }
+// and it returns the following json object
+// { "scores": [
+//   {
+//      "song_id": "0088dOQPiD0Qb0Dl8ol09D98IOllI1id",
+//      "SP_or_DP": 0,
+//      "difficulty": 2,
+//      "score": 989350,
+//      "prev_score": 983570,
+//      "lamp": 4,
+//      "time_played": 1620500291,
+//      "time_scraped": 1620522577
+//   },
+//   { /* etc. */ }
+// ]}
+// different difficulties of the same song are usually placed next to each other
+// in the json array, so keep that in mind when updating/inserting scores into a user's
+// score hashmap
+
+// lamps:
+// 0 = fail
+// 1 = clear
+// 3 = goodFC
+// 4 = greatFC
+// 5 = PFC
+// 6 = MFC
+// 2 is presumably for life4, but it can't get that data so it is missing
+#[derive(Debug, Clone, Deserialize)]
+pub struct SanbaiScoreEntry {
+    pub song_id: SongId,
+    pub difficulty: u8,
+    pub score: u32,
+    #[serde(deserialize_with = "num_to_sanbai_combo")]
+    pub lamp: ComboType,
+}
+
+fn num_to_sanbai_combo<'de, D>(deserializer: D) -> Result<ComboType, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let num = <u8>::deserialize(deserializer)?;
+    Ok(match ComboType::from_sanbai_lamp_index(num) {
+        Some(c) => c,
+        None => todo!("Add unrecognized number error"),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct SanbaiScoreOuter {
+    scores: Vec<SanbaiScoreEntry>,
+}
+
+pub async fn get_sanbai_scores(http: Client, username: &str) -> Result<Vec<SanbaiScoreEntry>> {
+    let url = "https://3icecream.com/api/follow_scores";
+    let json_data = serde_json::json!({
+        "username": username,
+    });
+
+    let scores_outer = http
+        .post(url)
+        .json(&json_data)
+        .send()
+        .await?
+        .json::<SanbaiScoreOuter>()
+        .await?;
+    Ok(scores_outer.scores)
+}

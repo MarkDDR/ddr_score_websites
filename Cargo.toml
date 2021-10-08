@@ -12,13 +12,12 @@ html-escape = "0.2.9"
 lazy_static = "1.4.0"
 num-format = "0.4.0"
 regex = "1.5.4"
-reqwest = "0.11.4"
+reqwest = { version = "0.11.4", features = ["json"] }
 serde = { version = "1.0.127", features = ["derive"] }
 serde_json = "1.0.66"
 serde_repr = "0.1.7"
 thiserror = "1.0.28"
 tokio-stream = "0.1.7"
-toml = "0.5.8"
 tracing = "0.1.26"
 
 [dev-dependencies]
