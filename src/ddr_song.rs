@@ -6,6 +6,7 @@ use tracing::info;
 use crate::score_websites::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
 use crate::score_websites::skill_attack::{SkillAttackIndex, SkillAttackSong};
 
+// TODO change this to packed base64 representation
 pub type SongId = String;
 
 #[derive(Debug, Clone)]

@@ -1,19 +1,26 @@
 use std::{
     collections::HashMap,
+    future::Future,
     ops::{Index, IndexMut},
+    sync::Arc,
 };
 
-use crate::{score_websites::sanbai::get_sanbai_scores, Client};
+use crate::{
+    score_websites::{
+        sanbai::get_sanbai_scores,
+        skill_attack::{self, SkillAttackSong},
+    },
+    Client,
+};
 use anyhow::Result;
+use tokio::sync::oneshot;
 
 use crate::{
     ddr_song::{DDRSong, SongId},
-    score_websites::{
-        sanbai::SanbaiScoreEntry,
-        skill_attack::{SkillAttackIndex, SkillAttackScores},
-    },
+    score_websites::{sanbai::SanbaiScoreEntry, skill_attack::SkillAttackIndex},
 };
 
+/// The scores and lamp colors of each difficulty of a specific song
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Scores {
     pub beg_score: Option<ScoreCombo>,
@@ -29,7 +36,7 @@ impl Scores {
     pub fn update(&mut self, other: &Self) {
         for level_index in 0..=4 {
             let new_score = match (self[level_index], other[level_index]) {
-                (Some(our_score), Some(other_score)) => Some(our_score.merge(other_score)),
+                (Some(our_score), Some(other_score)) => Some(our_score.maximize(other_score)),
                 (None, Some(only_score)) | (Some(only_score), None) => Some(only_score),
                 (None, None) => None,
             };
@@ -85,14 +92,35 @@ impl IndexMut<usize> for Scores {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+/// The score and lamp color for a single unspecified difficulty of an unspecified song
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ScoreCombo {
     pub score: u32,
     pub lamp: LampType,
 }
 
 impl ScoreCombo {
-    pub fn merge(self, other: Self) -> Self {
+    /// Creates a new `ScoreCombo` by comparing `self` and `other` and taking
+    /// the max of `score` and the max of `lamp`.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use score_websites::scores::{ScoreCombo, LampType};
+    ///
+    /// let score_a = ScoreCombo {
+    ///     score: 890_000,
+    ///     lamp: LampType::GreatCombo,
+    /// };
+    /// let score_b = ScoreCombo {
+    ///     score: 950_000,
+    ///     lamp: LampType::NoCombo,
+    /// };
+    /// assert_eq!(score_a.maximize(score_b), ScoreCombo {
+    ///     score: 950_000,
+    ///     lamp: LampType::GreatCombo,
+    /// });
+    /// ```
+    pub fn maximize(self, other: Self) -> Self {
         let mut new = self.clone();
         new.score = std::cmp::max(self.score, other.score);
         new.lamp = std::cmp::max(self.lamp, other.lamp);
@@ -116,6 +144,8 @@ pub enum LampType {
 }
 
 impl LampType {
+    /// Converts the integer Skill Attack uses to represent their combo type
+    /// into `LampType`
     pub fn from_skill_attack_index(index: u8) -> Option<Self> {
         Some(match index {
             0 => Self::FailOrPass,
@@ -126,6 +156,8 @@ impl LampType {
         })
     }
 
+    /// Converts the integer Sanbai uses to represent their combo type
+    /// into `LampType`
     pub fn from_sanbai_lamp_index(index: u8) -> Option<Self> {
         Some(match index {
             0 => Self::Fail,
@@ -140,6 +172,7 @@ impl LampType {
     }
 }
 
+/// Represents a specific DDR player, including their scores.
 #[derive(Debug, Clone)]
 pub struct Player {
     pub name: String,
@@ -164,19 +197,91 @@ impl Player {
     }
 
     /// Downloads and updates scores by grabbing data from Skill Attack.
-    /// Ignores any potentially new song in the Skill Attack data set that
-    /// is not accounted for in the `song_list` set
-    // TODO have it return a "signal" that new songs may be unaccounted for,
-    // with a list of all skipped songs attached
+    ///
+    /// # `song_list` Future
+    /// `song_list` is needed to convert the raw Skill Attack scores into the format we use
+    /// and needs data from Skill Attack to be updated, but querying Skill Attack
+    /// is very slow and we don't want to block grabbing the raw Skill Attack scores
+    /// for every player while we wait for one request from Skill Attack so we can update the
+    /// `song_list`, so instead we use a `Future` so we don't block grabbing the raw scores.
+    /// The idea is the `Future` can be the receiving end of some kind of
+    /// "Single Producer, Multiple Consumer"
     pub async fn update_scores_from_skill_attack(
         &mut self,
         http: Client,
-        song_list: &[DDRSong],
+        song_list: impl Future<Output = Arc<Vec<DDRSong>>>,
     ) -> Result<()> {
-        todo!();
+        let sa_scores = skill_attack::get_scores(http, self.ddr_code).await?;
+        let song_list = song_list.await;
+
+        self.update_skill_attack_inner(song_list, sa_scores);
+
+        Ok(())
     }
 
-    /// Downloads and updates scores by grabbing data from Sanbai
+    /// Downloads scores and song list from Skill Attack. Sends the raw Skill Attack
+    /// songs back through the oneshot sender to be processed into our own
+    /// song list format.
+    ///
+    /// # Why is updating the scores and songs combined here?
+    /// We can scrap a single web page on Skill Attack for both song and score data. Unfortunately
+    /// Skill Attack is very slow, so we want to avoid making duplicate requests if we can.
+    pub async fn update_scores_and_songs_from_skill_attack(
+        &mut self,
+        http: Client,
+        sa_song_sender: oneshot::Sender<Vec<SkillAttackSong>>,
+        song_list: impl Future<Output = Arc<Vec<DDRSong>>>,
+    ) -> Result<()> {
+        let (sa_scores, sa_songs) =
+            skill_attack::get_scores_and_song_data(http, self.ddr_code).await?;
+        sa_song_sender
+            .send(sa_songs)
+            .map_err(|_| anyhow::anyhow!("oneshot closed early"))?;
+        let song_list = song_list.await;
+
+        self.update_skill_attack_inner(song_list, sa_scores);
+
+        Ok(())
+    }
+
+    /// The inner function that maps our song list to Skill Attack's song list and
+    /// actually updates the `scores` stored in player. Pulled out here so it can
+    /// be reused in both skill attack update methods
+    fn update_skill_attack_inner(
+        &mut self,
+        song_list: Arc<Vec<DDRSong>>,
+        sa_scores: HashMap<u16, Scores>,
+    ) {
+        // create a mapping of skill attack indices to our song index type
+        let song_list_index: HashMap<SkillAttackIndex, _> = song_list
+            .iter()
+            .filter_map(|s| match s.skill_attack_index {
+                Some(sa_index) => Some((sa_index, &s.song_id)),
+                None => None,
+            })
+            .collect();
+        // get all
+        for (song_id, sa_score) in sa_scores.into_iter().filter_map(|(sa_idx, score)| {
+            match song_list_index.get(&sa_idx) {
+                Some(&song_id) => Some((song_id.to_owned(), score)),
+                None => {
+                    // old long removed song or new song not in db yet
+                    // either way ignore
+                    None
+                }
+            }
+        }) {
+            self.scores
+                .entry(song_id)
+                .and_modify(|inner_score| inner_score.update(&sa_score))
+                .or_insert(sa_score);
+        }
+    }
+
+    /// Downloads and updates scores from Sanbai
+    ///
+    /// Currently returns an error if `Player` does not have a sanbai username
+    /// associated with themselves.
     pub async fn update_scores_from_sanbai(&mut self, http: Client) -> Result<()> {
         let sanbai_username = match self.sanbai_username.as_deref() {
             Some(name) => name,
@@ -187,65 +292,41 @@ impl Player {
             return Ok(());
         }
 
-        // let mut sanbai_scores_iter = sanbai_scores.into_iter();
-        // // we know there is at least 1 element
-        // let first = sanbai_scores_iter.next().unwrap();
-        // let mut last_song_id = first.song_id;
-        // let mut combined_score = Scores::default();
-        // combined_score.update_from_sanbai_score_entry(&first);
+        let mut sanbai_scores_iter = sanbai_scores.into_iter();
+        // we know there is at least 1 element
+        let mut score_entry = sanbai_scores_iter.next().unwrap();
+        let mut last_song_id = score_entry.song_id.clone();
+        let mut combined_score = Scores::default();
 
-        // for score in sanbai_scores {
-        //     if score.song_id == last_song_id {
-        //         combined_score.update_from_sanbai_score_entry(&score);
-        //     } else {
-        //         let song_entry = self.scores.entry(last_song_id).or_default();
-        //         song_entry.update(&combined_score);
-        //     }
-        // }
-        todo!();
+        // a do-while loop
+        loop {
+            if score_entry.song_id == last_song_id {
+                combined_score.update_from_sanbai_score_entry(&score_entry);
+            } else {
+                // push current combined_score to self.scores hashmap
+                self.scores
+                    .entry(last_song_id)
+                    .and_modify(|inner_score| inner_score.update(&combined_score))
+                    .or_insert(combined_score);
+                // make new combined_score initialized to song_entry
+                combined_score = Scores::default();
+                combined_score.update_from_sanbai_score_entry(&score_entry);
+                // update last_song_id
+                last_song_id = score_entry.song_id;
+            }
+            score_entry = match sanbai_scores_iter.next() {
+                Some(s) => s,
+                None => {
+                    // push current combined_score to self.scores hashmap
+                    self.scores
+                        .entry(last_song_id)
+                        .and_modify(|inner_score| inner_score.update(&combined_score))
+                        .or_insert(combined_score);
+                    break;
+                }
+            };
+        }
 
         Ok(())
-    }
-
-    /// Updates from skill attack scores
-    pub fn update_from_sa_scores(sa_scores: &SkillAttackScores, ddr_songs: &[DDRSong]) -> Self {
-        let ddr_song_index: HashMap<SkillAttackIndex, &SongId> = ddr_songs
-            .iter()
-            .filter_map(|s| match s.skill_attack_index {
-                Some(sa_index) => Some((sa_index, &s.song_id)),
-                None => None,
-            })
-            .collect();
-        let scores: HashMap<_, _> = sa_scores
-            .song_score
-            .iter()
-            .filter_map(|(sa_idx, score)| {
-                match ddr_song_index.get(sa_idx) {
-                    Some(&song_id) => Some((song_id.to_owned(), *score)),
-                    None => {
-                        // old long removed song or new song not in db yet
-                        // either way ignore
-                        None
-                    }
-                }
-            })
-            .collect();
-
-        Self {
-            name: sa_scores.username.clone(),
-            ddr_code: sa_scores.ddr_code,
-            scores,
-            sanbai_username: None,
-        }
-    }
-
-    pub fn from_sanbai_scores(
-        sanbai_scores: &[SanbaiScoreEntry],
-        display_name: String,
-        ddr_code: u32,
-    ) -> Self {
-        // let mut scores = HashMap::new();
-        // let's assume
-        todo!()
     }
 }

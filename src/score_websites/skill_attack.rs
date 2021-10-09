@@ -16,24 +16,22 @@ pub struct SkillAttackSong {
     pub song_name: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct SkillAttackScores {
-    pub ddr_code: u32,
-    pub username: String,
-    pub song_score: HashMap<SkillAttackIndex, Scores>,
-}
+// #[derive(Debug, Clone)]
+// pub struct SkillAttackScores {
+//     pub ddr_code: u32,
+//     pub username: String,
+//     pub song_score: HashMap<SkillAttackIndex, Scores>,
+// }
 
-pub async fn get_scores(
-    http: Client,
-    username: String,
-    ddr_code: u32,
-) -> Result<SkillAttackScores> {
+pub type SkillAttackScores = HashMap<SkillAttackIndex, Scores>;
+
+pub async fn get_scores(http: Client, ddr_code: u32) -> Result<SkillAttackScores> {
     info!("Sent SA web request");
     let webpage = get_skill_attack_webpage(http, ddr_code).await?;
     let webpage = cut_webpage(&webpage)?;
     info!("got SA webpage");
 
-    let (user_scores, _) = get_scores_and_song_inner(webpage, false, username, ddr_code)?;
+    let (user_scores, _) = get_scores_and_song_inner(webpage, false)?;
 
     Ok(user_scores)
 }
@@ -48,7 +46,6 @@ fn cut_webpage(webpage: &str) -> Result<&str> {
 
 pub async fn get_scores_and_song_data(
     http: Client,
-    username: String,
     ddr_code: u32,
 ) -> Result<(SkillAttackScores, Vec<SkillAttackSong>)> {
     info!("Sent SA web request");
@@ -56,9 +53,9 @@ pub async fn get_scores_and_song_data(
     let webpage = cut_webpage(&webpage)?;
     info!("got SA webpage");
 
-    let (user_scores, songs) = get_scores_and_song_inner(webpage, true, username, ddr_code)?;
+    let (user_scores, songs) = get_scores_and_song_inner(webpage, true)?;
 
-    Ok((user_scores, songs.expect("Unexpectedly None")))
+    Ok((user_scores, songs))
 }
 
 async fn get_skill_attack_webpage(http: Client, ddr_code: u32) -> Result<String> {
@@ -77,9 +74,7 @@ async fn get_skill_attack_webpage(http: Client, ddr_code: u32) -> Result<String>
 fn get_scores_and_song_inner(
     webpage: &str,
     get_songs: bool,
-    username: String,
-    ddr_code: u32,
-) -> Result<(SkillAttackScores, Option<Vec<SkillAttackSong>>)> {
+) -> Result<(SkillAttackScores, Vec<SkillAttackSong>)> {
     lazy_static! {
         // A regex that extracts the inside of an Array
         // e.g. "blah blah = new Array(inside part);" will give "inside part"
@@ -155,13 +150,9 @@ fn get_scores_and_song_inner(
     //         .to_string()
     // };
 
-    let mut user_scores = SkillAttackScores {
-        ddr_code,
-        username,
-        song_score: HashMap::new(),
-    };
-    // let mut user_scores = SkillAttackScores(HashMap::new());
-    let mut song_names = if get_songs { Some(vec![]) } else { None };
+    let mut user_scores = HashMap::new();
+
+    let mut skill_attack_songs = vec![];
 
     info!("Started parsing SA songs");
     for song_index in song_indices_iter {
@@ -188,22 +179,19 @@ fn get_scores_and_song_inner(
                 lamp: combo_types[4].next().unwrap(),
             }),
         };
-        user_scores.song_score.insert(song_index, scores);
+        user_scores.insert(song_index, scores);
 
         if get_songs {
             let song_name = song_names_iter.next().expect("Song names ended early");
-            song_names = song_names.map(|mut v| {
-                v.push(SkillAttackSong {
-                    skill_attack_index: song_index,
-                    song_name,
-                });
-                v
+            skill_attack_songs.push(SkillAttackSong {
+                skill_attack_index: song_index,
+                song_name,
             });
         }
     }
     info!("Finished parsing SA songs");
 
-    Ok((user_scores, song_names))
+    Ok((user_scores, skill_attack_songs))
 }
 
 fn decode_html_escapes(input: &str) -> Cow<'_, str> {
