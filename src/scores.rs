@@ -20,14 +20,14 @@ use crate::{
     score_websites::{sanbai::SanbaiScoreEntry, skill_attack::SkillAttackIndex},
 };
 
-/// The scores and lamp colors of each difficulty of a specific song
+/// The scores and lamp for every difficulty of a specific song
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Scores {
-    pub beg_score: Option<ScoreCombo>,
-    pub basic_score: Option<ScoreCombo>,
-    pub diff_score: Option<ScoreCombo>,
-    pub expert_score: Option<ScoreCombo>,
-    pub chal_score: Option<ScoreCombo>,
+    pub beg_score: Option<ScoreRow>,
+    pub basic_score: Option<ScoreRow>,
+    pub diff_score: Option<ScoreRow>,
+    pub expert_score: Option<ScoreRow>,
+    pub chal_score: Option<ScoreRow>,
 }
 
 impl Scores {
@@ -55,7 +55,7 @@ impl Scores {
                 difficulty.lamp = std::cmp::max(difficulty.lamp, sanbai_entry.lamp);
             }
             None => {
-                *score_combo = Some(ScoreCombo {
+                *score_combo = Some(ScoreRow {
                     score: sanbai_entry.score,
                     lamp: sanbai_entry.lamp,
                 });
@@ -65,7 +65,7 @@ impl Scores {
 }
 
 impl Index<usize> for Scores {
-    type Output = Option<ScoreCombo>;
+    type Output = Option<ScoreRow>;
 
     fn index(&self, index: usize) -> &Self::Output {
         match index {
@@ -92,30 +92,30 @@ impl IndexMut<usize> for Scores {
     }
 }
 
-/// The score and lamp color for a single unspecified difficulty of an unspecified song
+/// A "row" of a score, representing the score and lamp of a specific difficulty of a song
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct ScoreCombo {
+pub struct ScoreRow {
     pub score: u32,
     pub lamp: LampType,
 }
 
-impl ScoreCombo {
-    /// Creates a new `ScoreCombo` by comparing `self` and `other` and taking
+impl ScoreRow {
+    /// Creates a new `ScoreRow` by comparing `self` and `other` and taking
     /// the max of `score` and the max of `lamp`.
     ///
     /// # Examples
     /// ```rust
-    /// use score_websites::scores::{ScoreCombo, LampType};
+    /// use score_websites::scores::{ScoreRow, LampType};
     ///
-    /// let score_a = ScoreCombo {
+    /// let score_a = ScoreRow {
     ///     score: 890_000,
     ///     lamp: LampType::GreatCombo,
     /// };
-    /// let score_b = ScoreCombo {
+    /// let score_b = ScoreRow {
     ///     score: 950_000,
     ///     lamp: LampType::NoCombo,
     /// };
-    /// assert_eq!(score_a.maximize(score_b), ScoreCombo {
+    /// assert_eq!(score_a.maximize(score_b), ScoreRow {
     ///     score: 950_000,
     ///     lamp: LampType::GreatCombo,
     /// });
