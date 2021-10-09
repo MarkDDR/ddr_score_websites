@@ -6,7 +6,7 @@ use regex::Regex;
 use reqwest::Client;
 use tracing::info;
 
-use crate::scores::{ComboType, ScoreCombo, Scores};
+use crate::scores::{LampType, ScoreCombo, Scores};
 
 pub type SkillAttackIndex = u16;
 
@@ -138,7 +138,7 @@ fn get_scores_and_song_inner(
         .map(|s| {
             s.split(',').map(|num_str| {
                 let combo_index = num_str.parse::<u8>().expect("non number in combo text");
-                ComboType::from_skill_attack_index(combo_index).unwrap()
+                LampType::from_skill_attack_index(combo_index).unwrap()
             })
         })
         .collect();
@@ -169,23 +169,23 @@ fn get_scores_and_song_inner(
         let scores = Scores {
             beg_score: scores[0].next().unwrap().map(|s| ScoreCombo {
                 score: s,
-                combo: combo_types[0].next().unwrap(),
+                lamp: combo_types[0].next().unwrap(),
             }),
             basic_score: scores[1].next().unwrap().map(|s| ScoreCombo {
                 score: s,
-                combo: combo_types[1].next().unwrap(),
+                lamp: combo_types[1].next().unwrap(),
             }),
             diff_score: scores[2].next().unwrap().map(|s| ScoreCombo {
                 score: s,
-                combo: combo_types[2].next().unwrap(),
+                lamp: combo_types[2].next().unwrap(),
             }),
             expert_score: scores[3].next().unwrap().map(|s| ScoreCombo {
                 score: s,
-                combo: combo_types[3].next().unwrap(),
+                lamp: combo_types[3].next().unwrap(),
             }),
             chal_score: scores[4].next().unwrap().map(|s| ScoreCombo {
                 score: s,
-                combo: combo_types[4].next().unwrap(),
+                lamp: combo_types[4].next().unwrap(),
             }),
         };
         user_scores.song_score.insert(song_index, scores);

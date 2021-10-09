@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    ops::{Index, IndexMut},
+};
 
-use crate::{Client, score_websites::sanbai::get_sanbai_scores};
+use crate::{score_websites::sanbai::get_sanbai_scores, Client};
 use anyhow::Result;
 
 use crate::{
@@ -21,43 +24,85 @@ pub struct Scores {
 }
 
 impl Scores {
-    pub fn get_score_by_index(&self, index: usize) -> Option<u32> {
-        match index {
-            0 => self.beg_score.map(|s| s.score),
-            1 => self.basic_score.map(|s| s.score),
-            2 => self.diff_score.map(|s| s.score),
-            3 => self.expert_score.map(|s| s.score),
-            4 => self.chal_score.map(|s| s.score),
-            _ => None,
+    /// Updates the score by comparing the scores in other and taking the
+    /// score and lamp type of both
+    pub fn update(&mut self, other: &Self) {
+        for level_index in 0..=4 {
+            let new_score = match (self[level_index], other[level_index]) {
+                (Some(our_score), Some(other_score)) => Some(our_score.merge(other_score)),
+                (None, Some(only_score)) | (Some(only_score), None) => Some(only_score),
+                (None, None) => None,
+            };
+            self[level_index] = new_score;
         }
     }
 
-    pub fn get_score_by_index_mut(&mut self, index: usize) -> Option<&mut Option<ScoreCombo>> {
-        Some(match index {
-            0 => &mut self.beg_score,
-            1 => &mut self.beg_score,
-            2 => &mut self.beg_score,
-            3 => &mut self.beg_score,
-            4 => &mut self.beg_score,
-            _ => return None,
-        })
-    }
+    /// Updates the score and lamp type of a single difficulty specified by
+    /// sanbai entry, taking the max
+    pub fn update_from_sanbai_score_entry(&mut self, sanbai_entry: &SanbaiScoreEntry) {
+        let score_combo = &mut self[sanbai_entry.difficulty as usize];
 
-    fn update_from_sanbai_score_entry(&mut self, sanbai_entry: &SanbaiScoreEntry) {
-        let score_combo = self.get_score_by_index_mut(sanbai_entry.difficulty as usize).unwrap();
-        todo!()
+        match score_combo.as_mut() {
+            Some(difficulty) => {
+                difficulty.score = std::cmp::max(difficulty.score, sanbai_entry.score);
+                difficulty.lamp = std::cmp::max(difficulty.lamp, sanbai_entry.lamp);
+            }
+            None => {
+                *score_combo = Some(ScoreCombo {
+                    score: sanbai_entry.score,
+                    lamp: sanbai_entry.lamp,
+                });
+            }
+        };
+    }
+}
+
+impl Index<usize> for Scores {
+    type Output = Option<ScoreCombo>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match index {
+            0 => &self.beg_score,
+            1 => &self.basic_score,
+            2 => &self.diff_score,
+            3 => &self.expert_score,
+            4 => &self.chal_score,
+            _ => panic!("Invalid score index"),
+        }
+    }
+}
+
+impl IndexMut<usize> for Scores {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        match index {
+            0 => &mut self.beg_score,
+            1 => &mut self.basic_score,
+            2 => &mut self.diff_score,
+            3 => &mut self.expert_score,
+            4 => &mut self.chal_score,
+            _ => panic!("Invalid score index"),
+        }
     }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct ScoreCombo {
     pub score: u32,
-    pub combo: ComboType,
+    pub lamp: LampType,
+}
+
+impl ScoreCombo {
+    pub fn merge(self, other: Self) -> Self {
+        let mut new = self.clone();
+        new.score = std::cmp::max(self.score, other.score);
+        new.lamp = std::cmp::max(self.lamp, other.lamp);
+        new
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
-pub enum ComboType {
-    /// Skill attack doesn't differeniate between fail and no combo
+pub enum LampType {
+    /// Skill attack doesn't differeniate between fail and pass
     FailOrPass,
     Fail,
     NoCombo,
@@ -70,7 +115,7 @@ pub enum ComboType {
     MarvelousCombo,
 }
 
-impl ComboType {
+impl LampType {
     pub fn from_skill_attack_index(index: u8) -> Option<Self> {
         Some(match index {
             0 => Self::FailOrPass,
@@ -141,16 +186,23 @@ impl Player {
         if sanbai_scores.is_empty() {
             return Ok(());
         }
-        
-        let mut sanbai_scores_iter = sanbai_scores.into_iter();
-        // we know there is at least 1 element
-        let first = sanbai_scores_iter.next().unwrap();
-        let mut last_song_id = first.song_id;
-        let mut combined_score = Scores::default();
-        
-        for score in sanbai_scores {
-            if last_song_id == 
-        }
+
+        // let mut sanbai_scores_iter = sanbai_scores.into_iter();
+        // // we know there is at least 1 element
+        // let first = sanbai_scores_iter.next().unwrap();
+        // let mut last_song_id = first.song_id;
+        // let mut combined_score = Scores::default();
+        // combined_score.update_from_sanbai_score_entry(&first);
+
+        // for score in sanbai_scores {
+        //     if score.song_id == last_song_id {
+        //         combined_score.update_from_sanbai_score_entry(&score);
+        //     } else {
+        //         let song_entry = self.scores.entry(last_song_id).or_default();
+        //         song_entry.update(&combined_score);
+        //     }
+        // }
+        todo!();
 
         Ok(())
     }

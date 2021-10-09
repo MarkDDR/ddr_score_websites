@@ -5,7 +5,7 @@ use serde_repr::Deserialize_repr;
 use std::fmt;
 use tracing::info;
 
-use crate::{ddr_song::SongId, scores::ComboType};
+use crate::{ddr_song::SongId, scores::LampType};
 
 pub async fn get_sanbai_song_data(http: Client) -> Result<Vec<SanbaiSong>> {
     let url = "https://3icecream.com/js/songdata.js";
@@ -186,15 +186,15 @@ pub struct SanbaiScoreEntry {
     pub difficulty: u8,
     pub score: u32,
     #[serde(deserialize_with = "num_to_sanbai_combo")]
-    pub lamp: ComboType,
+    pub lamp: LampType,
 }
 
-fn num_to_sanbai_combo<'de, D>(deserializer: D) -> Result<ComboType, D::Error>
+fn num_to_sanbai_combo<'de, D>(deserializer: D) -> Result<LampType, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let num = <u8>::deserialize(deserializer)?;
-    Ok(match ComboType::from_sanbai_lamp_index(num) {
+    Ok(match LampType::from_sanbai_lamp_index(num) {
         Some(c) => c,
         None => todo!("Add unrecognized number error"),
     })
