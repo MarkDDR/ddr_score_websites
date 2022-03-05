@@ -17,9 +17,9 @@ async fn main() -> Result<()> {
         (51527130, "MARK", "werecat"),
         (51546306, "TSWIFT", "tSwift"),
         (61578951, "YOSHI", "YOSHI"),
-        (61573431, "CERULEAN", "Melody"),
+        (61573431, "UNKNOWN", "Melody"),
         (51527333, "KDUBS", "hot_dawg"),
-        (51545388, "HAPPY HR", "HAPPY HOUR"),
+        (51545388, "JAY", "HAPPY HOUR"),
     ]
     .map(|(ddr_code, display_name, sanbai_username)| {
         Player::new(display_name, ddr_code, Some(sanbai_username))

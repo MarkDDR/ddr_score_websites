@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap};
 
-use anyhow::Result;
-use lazy_static::lazy_static;
+use crate::error::{Error, Result};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Client;
 use tracing::info;
@@ -39,7 +39,7 @@ pub async fn get_scores(http: Client, ddr_code: u32) -> Result<SkillAttackScores
 fn cut_webpage(webpage: &str) -> Result<&str> {
     let s_name_index = webpage
         .find("sName")
-        .ok_or(anyhow::anyhow!("couldn't find thing in html"))?;
+        .ok_or(Error::OtherParseError("couldn't find \"sName\" in html"))?;
     let webpage = &webpage[s_name_index..];
     Ok(webpage)
 }
@@ -75,14 +75,13 @@ fn get_scores_and_song_inner(
     webpage: &str,
     get_songs: bool,
 ) -> Result<(SkillAttackScores, Vec<SkillAttackSong>)> {
-    lazy_static! {
-        // A regex that extracts the inside of an Array
-        // e.g. "blah blah = new Array(inside part);" will give "inside part"
-        static ref INSIDE_ARRAY: Regex = Regex::new(r"Array\((.+)\);$").unwrap();
-        // A regex that captures each item that is in single quotes, accounting for escaped single quotes
-        // e.g. "'abcd', 'ef\'gh'" will give captures of "abcd" and "ef\'gh"
-        static ref QUOTED_TEXT: Regex = Regex::new(r"'(?P<text>(?:[^'\\]|\\.)*)'").unwrap();
-    }
+    // A regex that extracts the inside of an Array
+    // e.g. "blah blah = new Array(inside part);" will give "inside part"
+    static INSIDE_ARRAY: Lazy<Regex> = Lazy::new(|| Regex::new(r"Array\((.+)\);$").unwrap());
+    // A regex that captures each item that is in single quotes, accounting for escaped single quotes
+    // e.g. "'abcd', 'ef\'gh'" will give captures of "abcd" and "ef\'gh"
+    static QUOTED_TEXT: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"'(?P<text>(?:[^'\\]|\\.)*)'").unwrap());
 
     let array_contents = [
         "ddIndex",

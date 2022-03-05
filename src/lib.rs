@@ -1,5 +1,7 @@
 /// DDR song representation and searching
 pub mod ddr_song;
+/// Error enum
+pub mod error;
 /// The backend logic for querying and parsing of DDR score websites
 pub mod score_websites;
 /// Structures and methods related to storing the scores of players
@@ -12,11 +14,12 @@ use futures::stream::FuturesUnordered;
 pub use reqwest::Client;
 use tokio_stream::StreamExt;
 
-use anyhow::Result;
 use ddr_song::DDRSong;
 use score_websites::sanbai::{get_sanbai_scores, get_sanbai_song_data};
 use score_websites::skill_attack;
 use scores::Player;
+
+pub use error::Result;
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -51,7 +54,7 @@ impl Database {
                 let http = http.clone();
                 tokio::spawn(async move {
                     let scores = get_sanbai_scores(http, &name).await?;
-                    Result::<_, anyhow::Error>::Ok((i, scores))
+                    Result::Ok((i, scores))
                 })
             })
             .collect();
@@ -69,12 +72,12 @@ impl Database {
                 let ddr_code = p.ddr_code;
                 tokio::spawn(async move {
                     let scores = skill_attack::get_scores(http, ddr_code).await?;
-                    Result::<_, anyhow::Error>::Ok((i, scores))
+                    Result::Ok((i, scores))
                 })
             })
             .collect();
 
-        let sanbai_songs = sanbai_song_list.await.expect("task panicked")?;
+        let sanbai_songs = sanbai_song_list.await.expect("sanbai song task panicked")?;
         // Refactor needed: Player in scores shouldn't do any internet requests,
         // it should just make changes with raw info we provide from our requests
 
@@ -84,7 +87,7 @@ impl Database {
         loop {
             tokio::select! {
                 skill_attack_songs = &mut sa_song_list, if !songs_updated => {
-                    let (first_player_scores, skill_attack_songs) = skill_attack_songs??;
+                    let (first_player_scores, skill_attack_songs) = skill_attack_songs.expect("sa song task panicked")?;
                     self.songs = DDRSong::from_combining_song_lists(&sanbai_songs, &skill_attack_songs);
                     let first_player = &mut self.players[0];
                     process_skill_attack_score(first_player, first_player_scores, &self.songs);
@@ -92,7 +95,7 @@ impl Database {
 
                 },
                 Some(res) = sanbai_user_scores.next() => {
-                    let (player_index, sanbai_scores) = res??;
+                    let (player_index, sanbai_scores) = res.expect("sanbai user score task panicked")?;
                     let player = &mut self.players[player_index];
                     // each "score" here actually is just a single "row" of a score,
                     // aka the just the ESP score, or just the BDP score, and in this
@@ -113,7 +116,7 @@ impl Database {
                     }
                 },
                 Some(res) = sa_user_scores.next(), if songs_updated => {
-                    let (player_index, sa_scores) = res??;
+                    let (player_index, sa_scores) = res.expect("sa user score task panicked")?;
                     let player = &mut self.players[player_index];
                     process_skill_attack_score(player, sa_scores, &self.songs);
                 }
