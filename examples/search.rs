@@ -4,8 +4,8 @@ use anyhow::Result;
 use futures::stream::FuturesUnordered;
 use num_format::{Locale, ToFormattedString};
 use score_websites::ddr_song::{parse_search_query, search_by_title, Chart, DDRSong, SearchInfo};
-use score_websites::score_websites::sanbai::{get_sanbai_scores, get_sanbai_song_data};
-use score_websites::score_websites::skill_attack;
+// use score_websites::score_websites::sanbai::{get_sanbai_scores, get_sanbai_song_data};
+// use score_websites::score_websites::skill_attack;
 use score_websites::scores::Player;
 use tokio_stream::StreamExt;
 use tracing_subscriber::EnvFilter;
@@ -15,18 +15,17 @@ async fn main() -> Result<()> {
     setup();
     let http = score_websites::Client::new();
 
-    let scores = get_sanbai_scores(http.clone(), "werecat").await?;
-    println!("{:#?}", scores);
-    todo!();
-
     let users = [
-        (51527130, "MARK"),
-        (51546306, "TSWIFT"),
-        (61578951, "YOSHI"),
-        (61573431, "CERULEAN"),
-        (51527333, "KDUBS"),
-        (51545388, "HAPPY HR"),
-    ];
+        (51527130, "MARK", "werecat"),
+        (51546306, "TSWIFT", "tSwift"),
+        (61578951, "YOSHI", "YOSHI"),
+        (61573431, "CERULEAN", "Melody"),
+        (51527333, "KDUBS", "hot_dawg"),
+        (51545388, "HAPPY HR", "HAPPY HOUR"),
+    ]
+    .map(|(ddr_code, display_name, sanbai_username)| {
+        Player::new(display_name, ddr_code, Some(sanbai_username))
+    });
 
     // split users into two futures
     //   - one to get scores and songs from first user

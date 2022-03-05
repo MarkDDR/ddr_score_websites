@@ -6,7 +6,7 @@ use tracing::info;
 use crate::score_websites::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
 use crate::score_websites::skill_attack::{SkillAttackIndex, SkillAttackSong};
 
-// TODO change this to packed base64 representation
+// TODO change this to packed [u8; 24] base64 representation
 pub type SongId = String;
 
 #[derive(Debug, Clone)]
@@ -133,6 +133,12 @@ impl DDRSong {
         ddr_songs
     }
 }
+
+// impl From<SanbaiSong> for DDRSong {
+//     fn from(sanbai: SanbaiSong) -> Self {
+//         todo!()
+//     }
+// }
 
 pub fn parse_search_query<'query, 'ddr_song>(
     song_list: impl IntoIterator<Item = &'ddr_song DDRSong> + 'ddr_song,
