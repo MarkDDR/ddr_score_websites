@@ -6,12 +6,14 @@ pub mod error;
 pub mod score_websites;
 /// Structures and methods related to storing the scores of players
 pub mod scores;
+/// Search
+pub mod search;
 
 use std::collections::HashMap;
 
 use futures::stream::FuturesUnordered;
 /// `reqwest`'s async http client re-exported
-pub use reqwest::Client;
+pub use reqwest::Client as HttpClient;
 use tokio_stream::StreamExt;
 
 use ddr_song::DDRSong;
@@ -28,7 +30,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new(http: Client, players: impl Into<Vec<Player>>) -> Result<Self> {
+    pub async fn new(http: HttpClient, players: impl Into<Vec<Player>>) -> Result<Self> {
         let mut db = Self {
             songs: vec![],
             players: players.into(),
@@ -37,7 +39,7 @@ impl Database {
         Ok(db)
     }
 
-    pub async fn update_scores(&mut self, http: Client) -> Result<()> {
+    pub async fn update_scores(&mut self, http: HttpClient) -> Result<()> {
         // create tasks for
         //  - sanbai song list,
         //  - sanbai user scores,

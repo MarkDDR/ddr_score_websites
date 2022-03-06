@@ -1,9 +1,9 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use crate::error::{Error, Result};
+use crate::HttpClient;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use reqwest::Client;
 use tracing::info;
 
 use crate::scores::{LampType, ScoreRow, Scores};
@@ -25,7 +25,7 @@ pub struct SkillAttackSong {
 
 pub type SkillAttackScores = HashMap<SkillAttackIndex, Scores>;
 
-pub async fn get_scores(http: Client, ddr_code: u32) -> Result<SkillAttackScores> {
+pub async fn get_scores(http: HttpClient, ddr_code: u32) -> Result<SkillAttackScores> {
     info!("Sent SA web request");
     let webpage = get_skill_attack_webpage(http, ddr_code).await?;
     let webpage = cut_webpage(&webpage)?;
@@ -45,7 +45,7 @@ fn cut_webpage(webpage: &str) -> Result<&str> {
 }
 
 pub async fn get_scores_and_song_data(
-    http: Client,
+    http: HttpClient,
     ddr_code: u32,
 ) -> Result<(SkillAttackScores, Vec<SkillAttackSong>)> {
     info!("Sent SA web request");
@@ -58,7 +58,7 @@ pub async fn get_scores_and_song_data(
     Ok((user_scores, songs))
 }
 
-async fn get_skill_attack_webpage(http: Client, ddr_code: u32) -> Result<String> {
+async fn get_skill_attack_webpage(http: HttpClient, ddr_code: u32) -> Result<String> {
     let base = "http://skillattack.com/sa4/dancer_score.php?_=matrix&ddrcode=";
     let url = format!("{}{}", base, ddr_code);
 
@@ -71,6 +71,7 @@ async fn get_skill_attack_webpage(http: Client, ddr_code: u32) -> Result<String>
     Ok(webpage)
 }
 
+// TODO better (real) error handling
 fn get_scores_and_song_inner(
     webpage: &str,
     get_songs: bool,

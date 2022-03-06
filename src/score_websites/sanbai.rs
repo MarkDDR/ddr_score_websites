@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use reqwest::Client;
+use crate::HttpClient;
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 use std::fmt;
@@ -8,7 +8,7 @@ use tracing::info;
 
 use crate::{ddr_song::SongId, scores::LampType};
 
-pub async fn get_sanbai_song_data(http: Client) -> Result<Vec<SanbaiSong>> {
+pub async fn get_sanbai_song_data(http: HttpClient) -> Result<Vec<SanbaiSong>> {
     let url = "https://3icecream.com/js/songdata.js";
     info!("Sent Sanbai web request");
     let songdata_js = http.get(url).send().await?.text().await?;
@@ -20,7 +20,8 @@ pub async fn get_sanbai_song_data(http: Client) -> Result<Vec<SanbaiSong>> {
         .ok_or(Error::OtherParseError("missing `;` suffix"))?;
 
     info!("Sanbai parse start");
-    let songdata: Vec<SanbaiSong> = serde_json::from_str(songdata_js)?;
+    let songdata: Vec<SanbaiSong> =
+        serde_json::from_str(songdata_js).map_err(|e| Error::SanbaiSongJsonParseError(e))?;
     info!("Sanbai parse end");
     Ok(songdata)
 }
@@ -206,7 +207,7 @@ struct SanbaiScoreOuter {
     scores: Vec<SanbaiScoreEntry>,
 }
 
-pub async fn get_sanbai_scores(http: Client, username: &str) -> Result<Vec<SanbaiScoreEntry>> {
+pub async fn get_sanbai_scores(http: HttpClient, username: &str) -> Result<Vec<SanbaiScoreEntry>> {
     let url = "https://3icecream.com/api/follow_scores";
     let json_data = serde_json::json!({
         "username": username,
@@ -219,7 +220,12 @@ pub async fn get_sanbai_scores(http: Client, username: &str) -> Result<Vec<Sanba
         .send()
         .await?
         .json::<SanbaiScoreOuter>()
-        .await?;
+        .await;
+    let scores_outer = match scores_outer {
+        Ok(x) => x,
+        Err(e) if e.is_decode() => return Err(Error::SanbaiScoreJsonParseError(e)),
+        Err(e) => return Err(e.into()),
+    };
     info!("Received sanbai scores");
     Ok(scores_outer.scores)
 }

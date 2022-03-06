@@ -2,7 +2,8 @@ use std::cmp::Reverse;
 
 use anyhow::Result;
 use num_format::{Locale, ToFormattedString};
-use score_websites::ddr_song::{parse_search_query, search_by_title, Chart, SearchInfo};
+use score_websites::ddr_song::Chart;
+use score_websites::search::{parse_search_query, search_by_title, SearchInfo};
 // use score_websites::score_websites::sanbai::{get_sanbai_scores, get_sanbai_song_data};
 // use score_websites::score_websites::skill_attack;
 use score_websites::scores::Player;
@@ -11,7 +12,7 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> Result<()> {
     setup();
-    let http = score_websites::Client::new();
+    let http = score_websites::HttpClient::new();
 
     let users = [
         (51527130, "MARK", "werecat"),
