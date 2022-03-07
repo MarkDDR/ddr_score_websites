@@ -16,9 +16,10 @@ use futures::stream::FuturesUnordered;
 pub use reqwest::Client as HttpClient;
 use tokio_stream::StreamExt;
 
+use crate::ddr_song::SongId;
+use crate::score_websites::sanbai::{get_sanbai_scores, get_sanbai_song_data};
+use crate::score_websites::skill_attack;
 use ddr_song::DDRSong;
-use score_websites::sanbai::{get_sanbai_scores, get_sanbai_song_data};
-use score_websites::skill_attack;
 use scores::Player;
 
 pub use error::Result;
@@ -103,16 +104,16 @@ impl Database {
                     // aka the just the ESP score, or just the BDP score, and in this
                     // vec adjacent difficulty scores are usually next to each other,
                     // so we try to take advantage of that here
-                    let mut current_score_entry: Option<(&str, &mut scores::Scores)> = None;
+                    let mut current_score_entry: Option<(&SongId, &mut scores::Scores)> = None;
                     for score in &sanbai_scores {
                         match current_score_entry {
-                            Some((name, ref mut entry)) if name == score.song_id => {
+                            Some((id, ref mut entry)) if id == &score.song_id => {
                                 entry.update_from_sanbai_score_entry(score)
                             }
                             _ => {
                                 let entry = player.scores.entry(score.song_id.clone()).or_default();
                                 entry.update_from_sanbai_score_entry(score);
-                                current_score_entry = Some((score.song_id.as_str(), entry));
+                                current_score_entry = Some((&score.song_id, entry));
                             }
                         }
                     }
@@ -144,11 +145,11 @@ fn process_skill_attack_score(
 ) {
     for (song_id, new_score) in songs
         .iter()
-        .filter_map(|s| Some((s.song_id.as_str(), sa_scores.get(&s.skill_attack_index?)?)))
+        .filter_map(|s| Some((&s.song_id, sa_scores.get(&s.skill_attack_index?)?)))
     {
         player
             .scores
-            .entry(song_id.to_owned())
+            .entry(song_id.clone())
             .or_default()
             .update(new_score);
     }

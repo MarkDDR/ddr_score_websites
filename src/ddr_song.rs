@@ -3,12 +3,12 @@ use tracing::info;
 use crate::score_websites::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
 use crate::score_websites::skill_attack::{SkillAttackIndex, SkillAttackSong};
 
-// TODO change this to packed [u8; 24] base64 representation
-pub type SongId = String;
+mod song_id;
+pub use song_id::SongId;
 
 #[derive(Debug, Clone)]
 pub struct DDRSong {
-    pub song_id: String,
+    pub song_id: SongId,
     pub skill_attack_index: Option<SkillAttackIndex>,
     pub song_name: String,
     pub romanized_name: Option<String>,
@@ -26,19 +26,15 @@ impl DDRSong {
         sanbai: &SanbaiSong,
         skill_attack: Option<&SkillAttackSong>,
     ) -> Self {
-        let search_names: Vec<String> = sanbai
-            .romanized_name
-            .iter()
-            .map(|s| s.as_str())
-            .chain(sanbai.alternate_name.iter().map(|s| s.as_str()))
-            .chain(sanbai.searchable_name.iter().map(|s| s.as_str()))
+        let search_names: Vec<String> = std::iter::once(sanbai.song_name.as_str())
+            .chain(sanbai.romanized_name.as_deref())
+            .chain(sanbai.alternate_name.iter().flat_map(|s| s.split('/')))
+            .chain(sanbai.searchable_name.iter().flat_map(|s| s.split('/')))
             // TODO change the sanbai struct for those names to be `Vec<String>`, split by '/'
             // Multiple names in sanbai are delimated by '/'. The only
             // song in DDR with '/' in its title atm is "I/O", which doesn't
             // have any alternate names. To account for this though we do this split
             // before we add the "raw song name" to the search names
-            .flat_map(|s| s.split('/'))
-            .chain(std::iter::once(sanbai.song_name.as_str()))
             .map(|s| s.to_lowercase())
             .collect();
         Self {
@@ -132,7 +128,7 @@ impl DDRSong {
 }
 
 #[repr(u8)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Chart {
     GSP,
     BSP,

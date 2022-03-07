@@ -37,10 +37,17 @@ where
     })
 }
 
+fn parse_song_id<'de, D>(deserializer: D) -> StdResult<SongId, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = <&str>::deserialize(deserializer)?;
+    Ok(s.parse().unwrap())
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct SanbaiSong {
-    // TODO make a `SanbaiId([u8; 24])` type that decodes the raw `String` with base64
-    // base64::decode_config(<string form of song_id>, base64::STANDARD_NO_PAD)
+    #[serde(deserialize_with = "parse_song_id")]
     pub song_id: SongId,
     pub song_name: String,
     pub alternate_name: Option<String>,
@@ -136,19 +143,25 @@ impl Difficulties {
         self.0[0..5].contains(&difficulty)
     }
 
-    pub fn has_single_challenge(&self) -> bool {
+    /// Returns true if the song has a CSP or CDP chart
+    pub fn has_challenge_chart(&self) -> bool {
         self.0[4] > 0
     }
 
-    pub fn has_non_challenge(&self) -> bool {
+    /// Returns true if the song has charts that aren't CSP
+    pub fn has_non_challenge_charts(&self) -> bool {
         self.0[0] > 0
+    }
+
+    pub fn single_difficulties(&self) -> [u8; 5] {
+        self.0[0..5].try_into().unwrap()
     }
 }
 
 #[derive(Debug, Copy, Clone, Deserialize)]
 pub struct LockTypes(pub [i32; 9]);
 
-// TODO sanbai scores
+// Sanbai scores
 // we can get the scores of a user by sending a POST request to
 // https://3icecream.com/api/follow_scores
 // with the following json
@@ -177,13 +190,14 @@ pub struct LockTypes(pub [i32; 9]);
 // lamps:
 // 0 = fail
 // 1 = clear
+// 2 = Unknown, but presumably life4
 // 3 = goodFC
 // 4 = greatFC
 // 5 = PFC
 // 6 = MFC
-// 2 is presumably for life4, but it can't get that data so it is missing
 #[derive(Debug, Clone, Deserialize)]
 pub struct SanbaiScoreEntry {
+    #[serde(deserialize_with = "parse_song_id")]
     pub song_id: SongId,
     pub difficulty: u8,
     pub score: u32,
