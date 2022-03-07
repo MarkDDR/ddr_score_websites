@@ -1,5 +1,5 @@
 use crate::ddr_song::{Chart, DDRSong};
-use crate::score_websites::skill_attack::SkillAttackIndex;
+use crate::website_backends::skill_attack::SkillAttackIndex;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy)]

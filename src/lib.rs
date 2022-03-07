@@ -2,12 +2,12 @@
 pub mod ddr_song;
 /// Error enum
 pub mod error;
-/// The backend logic for querying and parsing of DDR score websites
-pub mod score_websites;
 /// Structures and methods related to storing the scores of players
 pub mod scores;
 /// Search
 pub mod search;
+/// The backend logic for querying and parsing of DDR score websites
+pub mod website_backends;
 
 use std::collections::HashMap;
 
@@ -17,8 +17,8 @@ pub use reqwest::Client as HttpClient;
 use tokio_stream::StreamExt;
 
 use crate::ddr_song::SongId;
-use crate::score_websites::sanbai::{get_sanbai_scores, get_sanbai_song_data};
-use crate::score_websites::skill_attack;
+use crate::website_backends::sanbai::{get_sanbai_scores, get_sanbai_song_data};
+use crate::website_backends::skill_attack;
 use ddr_song::DDRSong;
 use scores::Player;
 

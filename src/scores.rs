@@ -3,7 +3,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::{ddr_song::SongId, score_websites::sanbai::SanbaiScoreEntry};
+use crate::{ddr_song::SongId, website_backends::sanbai::SanbaiScoreEntry};
 
 /// The scores and lamp for every difficulty of a specific song
 #[derive(Debug, Clone, Copy, Default)]
@@ -120,7 +120,7 @@ impl ScoreRow {
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub enum LampType {
     /// Skill attack doesn't differeniate between fail and pass
-    FailOrPass,
+    Unknown,
     Fail,
     NoCombo,
     Life4Combo,
@@ -137,7 +137,7 @@ impl LampType {
     /// into `LampType`
     pub fn from_skill_attack_index(index: u8) -> Option<Self> {
         Some(match index {
-            0 => Self::FailOrPass,
+            0 => Self::Unknown,
             1 => Self::GoodGreatCombo,
             2 => Self::PerfectCombo,
             3 => Self::MarvelousCombo,

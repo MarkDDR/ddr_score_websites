@@ -157,26 +157,36 @@ fn get_scores_and_song_inner(
     info!("Started parsing SA songs");
     for song_index in song_indices_iter {
         // TODO make this cleaner
+        let g_score = scores[0].next().unwrap();
+        let g_lamp = combo_types[0].next().unwrap();
+        let b_score = scores[1].next().unwrap();
+        let b_lamp = combo_types[1].next().unwrap();
+        let d_score = scores[2].next().unwrap();
+        let d_lamp = combo_types[2].next().unwrap();
+        let e_score = scores[3].next().unwrap();
+        let e_lamp = combo_types[3].next().unwrap();
+        let c_score = scores[4].next().unwrap();
+        let c_lamp = combo_types[4].next().unwrap();
         let scores = Scores {
-            beg_score: scores[0].next().unwrap().map(|s| ScoreRow {
+            beg_score: g_score.map(|s| ScoreRow {
                 score: s,
-                lamp: combo_types[0].next().unwrap(),
+                lamp: g_lamp,
             }),
-            basic_score: scores[1].next().unwrap().map(|s| ScoreRow {
+            basic_score: b_score.map(|s| ScoreRow {
                 score: s,
-                lamp: combo_types[1].next().unwrap(),
+                lamp: b_lamp,
             }),
-            diff_score: scores[2].next().unwrap().map(|s| ScoreRow {
+            diff_score: d_score.map(|s| ScoreRow {
                 score: s,
-                lamp: combo_types[2].next().unwrap(),
+                lamp: d_lamp,
             }),
-            expert_score: scores[3].next().unwrap().map(|s| ScoreRow {
+            expert_score: e_score.map(|s| ScoreRow {
                 score: s,
-                lamp: combo_types[3].next().unwrap(),
+                lamp: e_lamp,
             }),
-            chal_score: scores[4].next().unwrap().map(|s| ScoreRow {
+            chal_score: c_score.map(|s| ScoreRow {
                 score: s,
-                lamp: combo_types[4].next().unwrap(),
+                lamp: c_lamp,
             }),
         };
         user_scores.insert(song_index, scores);

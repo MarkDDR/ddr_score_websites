@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use anyhow::Result;
 use num_format::{Locale, ToFormattedString};
-use score_websites::scores::Player;
+use score_websites::scores::{LampType, Player};
 use score_websites::search::SearchQuery;
 use tracing_subscriber::EnvFilter;
 
@@ -65,11 +65,24 @@ async fn main() -> Result<()> {
                     &result.song.song_name, result.chart, result.level
                 );
                 for (code, name, score) in user_song_scores {
-                    let score_str = match score {
-                        None => "-".to_string(),
-                        Some(s) => s.score.to_formatted_string(&Locale::en),
+                    let (score_str, lamp) = match score {
+                        None => ("-".to_string(), ""),
+                        Some(s) => (
+                            s.score.to_formatted_string(&Locale::en),
+                            match s.lamp {
+                                LampType::Unknown => "",
+                                LampType::Fail => "🇫",
+                                LampType::NoCombo => "",
+                                LampType::Life4Combo => "🔴",
+                                LampType::GoodGreatCombo => "🔵",
+                                LampType::GoodCombo => "🔵",
+                                LampType::GreatCombo => "🟢",
+                                LampType::PerfectCombo => "🟡",
+                                LampType::MarvelousCombo => "⚪",
+                            },
+                        ),
                     };
-                    println!("{} | {:8} | {:>9}", code, name, score_str);
+                    println!("{} | {:8} | {:>9} {}", code, name, score_str, lamp);
                 }
             }
             None => println!("Couldn't find that song"),

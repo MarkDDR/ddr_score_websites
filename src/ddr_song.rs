@@ -1,7 +1,7 @@
 use tracing::info;
 
-use crate::score_websites::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
-use crate::score_websites::skill_attack::{SkillAttackIndex, SkillAttackSong};
+use crate::website_backends::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
+use crate::website_backends::skill_attack::{SkillAttackIndex, SkillAttackSong};
 
 mod song_id;
 pub use song_id::SongId;
