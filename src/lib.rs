@@ -1,18 +1,21 @@
+/// Things related to a course in DDR
+pub mod courses;
 /// DDR song representation and searching
 pub mod ddr_song;
 /// Error enum
 pub mod error;
 /// Structures and methods related to storing the scores of players
 pub mod scores;
-/// Search
+/// Utilities to search the song list for a specific song
 pub mod search;
 /// The backend logic for querying and parsing of DDR score websites
 pub mod website_backends;
 
 use std::collections::HashMap;
 
+use courses::Course;
 use futures::stream::FuturesUnordered;
-/// `reqwest`'s async http client re-exported
+/// `reqwest`'s async http client re-exported.
 pub use reqwest::Client as HttpClient;
 use tokio_stream::StreamExt;
 
@@ -24,22 +27,28 @@ use scores::Player;
 
 pub use error::Result;
 
+/// The main struct of this crate. Handles fetching songs and scores from
+/// the different backends and combining them into a single unified format
 #[derive(Clone, Debug)]
-pub struct Database {
+pub struct DDRDatabase {
     songs: Vec<DDRSong>,
     players: Vec<Player>,
+    courses: Vec<Course>,
 }
 
-impl Database {
+impl DDRDatabase {
+    /// Creates a new `DDRDatabase` by fetching song lists and scores for the users
     pub async fn new(http: HttpClient, players: impl Into<Vec<Player>>) -> Result<Self> {
         let mut db = Self {
             songs: vec![],
             players: players.into(),
+            courses: vec![],
         };
         db.update_scores(http).await?;
         Ok(db)
     }
 
+    /// Updates song list and user scores by fetching them again and updating in place
     pub async fn update_scores(&mut self, http: HttpClient) -> Result<()> {
         // create tasks for
         //  - sanbai song list,
@@ -129,15 +138,18 @@ impl Database {
         Ok(())
     }
 
+    /// A list of all the songs
     pub fn song_list(&self) -> &[DDRSong] {
         &self.songs
     }
 
+    /// A list of the users
     pub fn players(&self) -> &[Player] {
         &self.players
     }
 }
 
+// Helper function to reduce code duplication
 fn process_skill_attack_score(
     player: &mut Player,
     sa_scores: HashMap<u16, scores::Scores>,

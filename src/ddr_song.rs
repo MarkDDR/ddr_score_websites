@@ -1,7 +1,10 @@
-use tracing::info;
+use once_cell::sync::Lazy;
+use regex::Regex;
+use tracing::{info, warn};
 
 use crate::website_backends::sanbai::{DDRVersion, Difficulties, LockTypes, SanbaiSong};
 use crate::website_backends::skill_attack::{SkillAttackIndex, SkillAttackSong};
+use crate::{HttpClient, Result};
 
 mod song_id;
 pub use song_id::SongId;
@@ -125,6 +128,68 @@ impl DDRSong {
 
         ddr_songs
     }
+
+    pub async fn fetch_bpm(&self, http: HttpClient) -> Result<Option<Bpm>> {
+        // Matches strings like this
+        // "<span class="sp-bpm">75-528</span>"
+        //              ^--------++-+++------^
+        //                       ^^ ^^^
+        //                       |     \
+        //                       first  second
+        // "<span class="sp-bpm">150</span>"
+        //              ^--------+++------^
+        //                       ^^^
+        //                       |
+        //                       first
+        static SP_BPM_FINDER: Lazy<Regex> = Lazy::new(|| {
+            Regex::new(r#""sp-bpm">(?P<first>\d+)(-(?P<second>\d+))?<\/span>"#).unwrap()
+        });
+
+        let song_info_url = format!("https://3icecream.com/ddr/song_details/{}", self.song_id);
+
+        let response = http.get(song_info_url).send().await?.text().await?;
+        let mut cap_iter = SP_BPM_FINDER.captures_iter(&response);
+        if let Some(cap) = cap_iter.next() {
+            match (cap.name("first"), cap.name("second")) {
+                (Some(first_cap), Some(second_cap)) => {
+                    let lower = first_cap.as_str().parse::<u16>().expect("Really big bpm");
+                    let upper = second_cap.as_str().parse::<u16>().expect("Really big bpm");
+                    if let Some(main_bpm_cap) = cap_iter.next() {
+                        let main = main_bpm_cap
+                            .name("first")
+                            .expect("This should be impossible")
+                            .as_str()
+                            .parse::<u16>()
+                            .expect("Really big bpm");
+                        Ok(Some(Bpm::Range { lower, upper, main }))
+                    } else {
+                        warn!("We couldn't find the main bpm!");
+                        Err(crate::error::Error::SanbaiBpmHtmlParseError)
+                    }
+                }
+                (Some(first_cap), None) => {
+                    let bpm = first_cap.as_str().parse::<u16>().expect("Really big bpm");
+                    Ok(Some(Bpm::Constant(bpm)))
+                }
+                _ => unreachable!("This case should be impossible"),
+            }
+        } else {
+            // Sanity check, we should see a `"sp-missing-bpm"` in the html
+            // if not something may have changed with the html so we should give an error for that
+            if response.contains(r#""sp-missing-bpm""#) {
+                Ok(None)
+            } else {
+                warn!("Bpm html might have changed!");
+                Err(crate::error::Error::SanbaiBpmHtmlParseError)
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum Bpm {
+    Constant(u16),
+    Range { lower: u16, upper: u16, main: u16 },
 }
 
 #[repr(u8)]

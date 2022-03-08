@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
 
@@ -58,6 +59,27 @@ impl Display for SongId {
         }
 
         write!(f, "{}", out)
+    }
+}
+
+impl<'de> Deserialize<'de> for SongId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = <&str>::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for SongId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // TODO can be more efficient if we make a stack str instead
+        let string = self.to_string();
+        serializer.serialize_str(&string)
     }
 }
 

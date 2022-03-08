@@ -15,4 +15,6 @@ pub enum Error {
     SanbaiSongJsonParseError(serde_json::Error),
     #[error("Error parsing into `SanbaiScoreOuter`")]
     SanbaiScoreJsonParseError(reqwest::Error),
+    #[error("Couldn't parse the bpm html, something may have changed")]
+    SanbaiBpmHtmlParseError,
 }

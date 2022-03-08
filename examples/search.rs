@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
         Player::new(display_name, ddr_code, Some(sanbai_username))
     });
 
-    let db = score_websites::Database::new(http.clone(), users).await?;
+    let db = score_websites::DDRDatabase::new(http.clone(), users).await?;
 
     let mut input = String::new();
     loop {

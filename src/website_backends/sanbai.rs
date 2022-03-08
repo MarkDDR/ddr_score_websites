@@ -37,17 +37,8 @@ where
     })
 }
 
-fn parse_song_id<'de, D>(deserializer: D) -> StdResult<SongId, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = <&str>::deserialize(deserializer)?;
-    Ok(s.parse().unwrap())
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct SanbaiSong {
-    #[serde(deserialize_with = "parse_song_id")]
     pub song_id: SongId,
     pub song_name: String,
     pub alternate_name: Option<String>,
@@ -65,11 +56,13 @@ pub struct SanbaiSong {
 }
 
 impl SanbaiSong {
+    /// 256x256 jacket
     pub fn get_jacket_url(&self) -> String {
         let base_url = "https://3icecream.com/img/banners/f/";
         format!("{}{}.jpg", base_url, self.song_id)
     }
 
+    /// 120x120 jacket
     pub fn get_small_jacket_url(&self) -> String {
         let base_url = "https://3icecream.com/img/banners/";
         format!("{}{}.jpg", base_url, self.song_id)
@@ -197,7 +190,6 @@ pub struct LockTypes(pub [i32; 9]);
 // 6 = MFC
 #[derive(Debug, Clone, Deserialize)]
 pub struct SanbaiScoreEntry {
-    #[serde(deserialize_with = "parse_song_id")]
     pub song_id: SongId,
     pub difficulty: u8,
     pub score: u32,
