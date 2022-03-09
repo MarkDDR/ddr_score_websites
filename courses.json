@@ -1,6 +1,9 @@
 [
     {
         "name": "Let's DANCE!",
+        "search_names": [
+            "lets dance"
+        ],
         "songs": [
             "Io9i8oQlbO1QqIdbbDPQl6b00OIPlIOP",
             "Oi1DI99DO6i6llQ8DDD6oDqOQqiP118d",
@@ -19,6 +22,9 @@
     },
     {
         "name": "KA・TA・KA・NA YEAH!",
+        "search_names": [
+            "katakana yeah"
+        ],
         "songs": [
             "ql1Q8P100IIlbl0Pdi08I8qD900idqQq",
             "doIiQl6oDPP6i9qobqoobblPQqPiI9bD",
@@ -55,6 +61,11 @@
     },
     {
         "name": "SWEETS HOPPING",
+        "search_names": [
+            "sweet hopping",
+            "sweet hoping",
+            "sweets hoping"
+        ],
         "songs": [
             "ioDOIO9iP8qqPiP9io9Ib1I91OoQ0q0O",
             "D6oPIlOlIIOi1oq6Pd6011lqobbqOlib",
@@ -154,6 +165,9 @@
     },
     {
         "name": "REMIXES",
+        "search_names": [
+            "remixs"
+        ],
         "songs": [
             "98D001P6b696O18P8qiIOl811bq1oQ16",
             "qD6q1PD0lIDP89DPDbOOIdq0Pi8iIdD6",
@@ -180,7 +194,10 @@
         ]
     },
     {
-        "name": "☆☆☆☆ stars",
+        "name": "☆☆☆☆",
+        "search_names": [
+            "stars"
+        ],
         "songs": [
             "lIQ1608o9O6bdoPO0ooi8io8i6q6bO1b",
             "q11d0oiQIlbP91dqqddPq9D80lbODbDi",

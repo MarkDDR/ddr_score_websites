@@ -7,12 +7,14 @@ use tokio_stream::StreamExt;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CourseSerializeInfo {
     pub name: String,
+    pub search_names: Option<Vec<String>>,
     pub songs: [Option<SongId>; 4],
 }
 
 #[derive(Debug, Clone)]
 pub struct Course {
     pub name: String,
+    pub search_names: Vec<String>,
     pub songs: Vec<Option<(DDRSong, Option<Bpm>)>>,
 }
 
@@ -49,8 +51,11 @@ impl Course {
             songs.push(res);
         }
 
+        let mut search_names = info.search_names.unwrap_or(Vec::new());
+        search_names.push(info.name.to_lowercase());
         Ok(Self {
             name: info.name,
+            search_names,
             songs,
         })
     }
