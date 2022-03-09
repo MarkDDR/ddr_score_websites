@@ -13,7 +13,6 @@ pub mod website_backends;
 
 use std::collections::HashMap;
 
-use courses::Course;
 use futures::stream::FuturesUnordered;
 /// `reqwest`'s async http client re-exported.
 pub use reqwest::Client as HttpClient;
@@ -33,7 +32,6 @@ pub use error::Result;
 pub struct DDRDatabase {
     songs: Vec<DDRSong>,
     players: Vec<Player>,
-    courses: Vec<Course>,
 }
 
 impl DDRDatabase {
@@ -42,7 +40,6 @@ impl DDRDatabase {
         let mut db = Self {
             songs: vec![],
             players: players.into(),
-            courses: vec![],
         };
         db.update_scores(http).await?;
         Ok(db)

@@ -142,7 +142,7 @@ impl DDRSong {
         //                       |
         //                       first
         static SP_BPM_FINDER: Lazy<Regex> = Lazy::new(|| {
-            Regex::new(r#""sp-bpm">(?P<first>\d+)(-(?P<second>\d+))?<\/span>"#).unwrap()
+            Regex::new(r#""sp-bpm">(?P<first>\d+)(-(?P<second>\d+))?</span>"#).unwrap()
         });
 
         let song_info_url = format!("https://3icecream.com/ddr/song_details/{}", self.song_id);
@@ -190,6 +190,15 @@ impl DDRSong {
 pub enum Bpm {
     Constant(u16),
     Range { lower: u16, upper: u16, main: u16 },
+}
+
+impl Bpm {
+    pub fn get_main_bpm(&self) -> u16 {
+        match *self {
+            Bpm::Constant(m) => m,
+            Bpm::Range { main, .. } => main,
+        }
+    }
 }
 
 #[repr(u8)]
