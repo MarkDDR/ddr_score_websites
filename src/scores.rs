@@ -18,25 +18,33 @@ pub struct Scores {
 impl Scores {
     /// Updates the score by comparing the scores in other and taking the
     /// score and lamp type of both
-    pub fn update(&mut self, other: &Self) {
+    /// Returns number of scores updated
+    pub fn update(&mut self, other: &Self) -> usize {
+        let mut num_updated = 0;
         for level_index in 0..=4 {
             let new_score = match (self[level_index], other[level_index]) {
                 (Some(our_score), Some(other_score)) => Some(our_score.maximize(other_score)),
                 (None, Some(only_score)) | (Some(only_score), None) => Some(only_score),
                 (None, None) => None,
             };
+            if self[level_index] != new_score {
+                num_updated += 1;
+            }
             self[level_index] = new_score;
         }
+        num_updated
     }
 
     /// Updates the score and lamp type of a single difficulty specified by
-    /// sanbai entry, taking the max
-    pub fn update_from_sanbai_score_entry(&mut self, sanbai_entry: &SanbaiScoreEntry) {
+    /// sanbai entry, taking the max.
+    /// Returns `true` if stored score changed
+    pub fn update_from_sanbai_score_entry(&mut self, sanbai_entry: &SanbaiScoreEntry) -> bool {
         // FIXME we are ignoring doubles scores for now
         if sanbai_entry.difficulty > 4 {
-            return;
+            return false;
         }
         let score_combo = &mut self[sanbai_entry.difficulty as usize];
+        let old_score_combo = score_combo.clone();
 
         match score_combo.as_mut() {
             Some(difficulty) => {
@@ -50,6 +58,11 @@ impl Scores {
                 });
             }
         };
+        if *score_combo != old_score_combo {
+            true
+        } else {
+            false
+        }
     }
 }
 

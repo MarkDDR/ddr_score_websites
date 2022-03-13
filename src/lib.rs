@@ -17,6 +17,7 @@ use futures::stream::FuturesUnordered;
 /// `reqwest`'s async http client re-exported.
 pub use reqwest::Client as HttpClient;
 use tokio_stream::StreamExt;
+use tracing::warn;
 
 use crate::ddr_song::SongId;
 use crate::website_backends::sanbai::{get_sanbai_scores, get_sanbai_song_data};
@@ -46,7 +47,8 @@ impl DDRDatabase {
     }
 
     /// Updates song list and user scores by fetching them again and updating in place
-    pub async fn update_scores(&mut self, http: HttpClient) -> Result<()> {
+    /// Returns number new songs and number of new scores
+    pub async fn update_scores(&mut self, http: HttpClient) -> Result<(usize, usize)> {
         // create tasks for
         //  - sanbai song list,
         //  - sanbai user scores,
@@ -87,19 +89,31 @@ impl DDRDatabase {
             .collect();
 
         let sanbai_songs = sanbai_song_list.await.expect("sanbai song task panicked")?;
-        // Refactor needed: Player in scores shouldn't do any internet requests,
-        // it should just make changes with raw info we provide from our requests
 
         tokio::pin!(sa_song_list);
         let mut songs_updated = false;
+        let mut num_new_songs = 0;
+        // FIXME double counting if skill attack score updates first and
+        // then sanbai score and sanbai score had more better lamp accuracy
+        let mut num_new_scores = 0;
         // await on all the futures and handle each as they finish
         loop {
             tokio::select! {
                 skill_attack_songs = &mut sa_song_list, if !songs_updated => {
+                    // TODO handle skill attack being down and skip/update just sanbai songs
+                    // TODO Keep old song list in mind and just update entries
                     let (first_player_scores, skill_attack_songs) = skill_attack_songs.expect("sa song task panicked")?;
-                    self.songs = DDRSong::from_combining_song_lists(&sanbai_songs, &skill_attack_songs);
+                    let new_song_list = DDRSong::from_combining_song_lists(&sanbai_songs, &skill_attack_songs);
+                    num_new_songs = match new_song_list.len().checked_sub(self.songs.len()) {
+                        Some(n) => n,
+                        None => {
+                            warn!("New song list has fewer songs than old song list!");
+                            0
+                        }
+                    };
+                    self.songs = new_song_list;
                     let first_player = &mut self.players[0];
-                    process_skill_attack_score(first_player, first_player_scores, &self.songs);
+                    num_new_scores += process_skill_attack_score(first_player, first_player_scores, &self.songs);
                     songs_updated = true;
 
                 },
@@ -114,11 +128,15 @@ impl DDRDatabase {
                     for score in &sanbai_scores {
                         match current_score_entry {
                             Some((id, ref mut entry)) if id == &score.song_id => {
-                                entry.update_from_sanbai_score_entry(score)
+                                if entry.update_from_sanbai_score_entry(score) {
+                                    num_new_scores += 1;
+                                }
                             }
                             _ => {
                                 let entry = player.scores.entry(score.song_id.clone()).or_default();
-                                entry.update_from_sanbai_score_entry(score);
+                                if entry.update_from_sanbai_score_entry(score) {
+                                    num_new_scores += 1;
+                                }
                                 current_score_entry = Some((&score.song_id, entry));
                             }
                         }
@@ -127,12 +145,12 @@ impl DDRDatabase {
                 Some(res) = sa_user_scores.next(), if songs_updated => {
                     let (player_index, sa_scores) = res.expect("sa user score task panicked")?;
                     let player = &mut self.players[player_index];
-                    process_skill_attack_score(player, sa_scores, &self.songs);
+                    num_new_scores += process_skill_attack_score(player, sa_scores, &self.songs);
                 }
                 else => break,
             }
         }
-        Ok(())
+        Ok((num_new_songs, num_new_scores))
     }
 
     /// A list of all the songs
@@ -147,21 +165,24 @@ impl DDRDatabase {
 }
 
 // Helper function to reduce code duplication
+// Returns the number of scores updated
 fn process_skill_attack_score(
     player: &mut Player,
     sa_scores: HashMap<u16, scores::Scores>,
     songs: &[DDRSong],
-) {
+) -> usize {
+    let mut num_new_scores = 0;
     for (song_id, new_score) in songs
         .iter()
         .filter_map(|s| Some((&s.song_id, sa_scores.get(&s.skill_attack_index?)?)))
     {
-        player
+        num_new_scores += player
             .scores
             .entry(song_id.clone())
             .or_default()
             .update(new_score);
     }
+    num_new_scores
 }
 
 #[cfg(test)]

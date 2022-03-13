@@ -71,7 +71,8 @@ async fn get_skill_attack_webpage(http: HttpClient, ddr_code: u32) -> Result<Str
     Ok(webpage)
 }
 
-// TODO better (real) error handling
+// This code is so ugly, I'm sorry
+// Maybe this can get replaced with a better more robust parser in the future
 fn get_scores_and_song_inner(
     webpage: &str,
     get_songs: bool,
@@ -99,41 +100,56 @@ fn get_scores_and_song_inner(
         "ddFcCsp",
     ]
     .iter()
-    // .inspect(|name| println!("{}", name))
-    .map(|name| webpage.find(name).unwrap())
-    .map(|index| (&webpage[index..]).lines().next().unwrap())
-    .map(|line| {
-        INSIDE_ARRAY
-            .captures(line)
-            .unwrap()
-            .get(1)
-            .unwrap()
-            .as_str()
+    .map(|name| {
+        webpage
+            .find(name)
+            .ok_or(Error::SkillAttackHtmlParseError(name))
     })
-    .collect::<Vec<_>>();
+    .map(|index| index.map(|index| (&webpage[index..]).lines().next().unwrap()))
+    .map(|line| {
+        line.and_then(|line| {
+            INSIDE_ARRAY
+                .captures(line)
+                .ok_or(Error::SkillAttackHtmlParseError("array regex capture"))
+                .and_then(|cap| {
+                    cap.get(1)
+                        .map(|s| s.as_str())
+                        .ok_or(Error::SkillAttackHtmlParseError("array regex match"))
+                })
+        })
+    })
+    .collect::<Result<Vec<_>>>()?;
 
-    let song_indices_iter = array_contents[0]
-        .split(',')
-        .map(|s| s.parse::<SkillAttackIndex>().unwrap());
-    let mut song_names_iter = QUOTED_TEXT
-        .captures_iter(array_contents[1])
-        .map(|cap| cap.name("text").unwrap().as_str())
-        .map(|s| decode_html_escapes(s).into_owned());
+    let song_indices_iter = array_contents[0].split(',').map(|s| {
+        s.parse::<SkillAttackIndex>()
+            .map_err(|_| Error::SkillAttackHtmlParseError("index parse"))
+    });
+    let mut song_names_iter = QUOTED_TEXT.captures_iter(array_contents[1]).map(|cap| {
+        cap.name("text")
+            .map(|s| decode_html_escapes(s.as_str()).into_owned())
+            .ok_or(Error::SkillAttackHtmlParseError("song name regex match"))
+    });
+
     let mut scores: Vec<_> = (&array_contents[2..7])
         .iter()
         .map(|s| {
-            QUOTED_TEXT
-                .captures_iter(s)
-                .map(|cap| cap.name("text").unwrap().as_str())
-                .map(|s| parse_number_with_commas(s))
+            QUOTED_TEXT.captures_iter(s).map(|cap| {
+                cap.name("text")
+                    .map(|s| parse_number_with_commas(s.as_str()))
+                    .ok_or(Error::SkillAttackHtmlParseError("score regex match"))
+            })
         })
         .collect();
     let mut combo_types: Vec<_> = (&array_contents[7..])
         .iter()
         .map(|s| {
             s.split(',').map(|num_str| {
-                let combo_index = num_str.parse::<u8>().expect("non number in combo text");
-                LampType::from_skill_attack_index(combo_index).unwrap()
+                let combo_index = num_str
+                    .parse::<u8>()
+                    .map_err(|_| Error::SkillAttackHtmlParseError("combo type num wasn't u8"))?;
+                LampType::from_skill_attack_index(combo_index).ok_or(
+                    Error::SkillAttackHtmlParseError("Unrecognized skill attack lamp type"),
+                )
             })
         })
         .collect();
@@ -156,17 +172,44 @@ fn get_scores_and_song_inner(
 
     info!("Started parsing SA songs");
     for song_index in song_indices_iter {
+        let song_index = song_index?;
         // TODO make this cleaner
-        let g_score = scores[0].next().unwrap();
-        let g_lamp = combo_types[0].next().unwrap();
-        let b_score = scores[1].next().unwrap();
-        let b_lamp = combo_types[1].next().unwrap();
-        let d_score = scores[2].next().unwrap();
-        let d_lamp = combo_types[2].next().unwrap();
-        let e_score = scores[3].next().unwrap();
-        let e_lamp = combo_types[3].next().unwrap();
-        let c_score = scores[4].next().unwrap();
-        let c_lamp = combo_types[4].next().unwrap();
+        let g_score = scores[0].next().ok_or(Error::SkillAttackHtmlParseError(
+            "beginner score ended early",
+        ))??;
+        let g_lamp = combo_types[0]
+            .next()
+            .ok_or(Error::SkillAttackHtmlParseError(
+                "beginner lamps ended early",
+            ))??;
+        let b_score = scores[1]
+            .next()
+            .ok_or(Error::SkillAttackHtmlParseError("basic score ended early"))??;
+        let b_lamp = combo_types[1]
+            .next()
+            .ok_or(Error::SkillAttackHtmlParseError("basic lamps ended early"))??;
+        let d_score = scores[2].next().ok_or(Error::SkillAttackHtmlParseError(
+            "difficult score ended early",
+        ))??;
+        let d_lamp = combo_types[2]
+            .next()
+            .ok_or(Error::SkillAttackHtmlParseError(
+                "difficult lamps ended early",
+            ))??;
+        let e_score = scores[3]
+            .next()
+            .ok_or(Error::SkillAttackHtmlParseError("expert score ended early"))??;
+        let e_lamp = combo_types[3]
+            .next()
+            .ok_or(Error::SkillAttackHtmlParseError("expert lamps ended early"))??;
+        let c_score = scores[4].next().ok_or(Error::SkillAttackHtmlParseError(
+            "challenge score ended early",
+        ))??;
+        let c_lamp = combo_types[4]
+            .next()
+            .ok_or(Error::SkillAttackHtmlParseError(
+                "challenge lamps ended early",
+            ))??;
         let scores = Scores {
             beg_score: g_score.map(|s| ScoreRow {
                 score: s,
@@ -192,7 +235,9 @@ fn get_scores_and_song_inner(
         user_scores.insert(song_index, scores);
 
         if get_songs {
-            let song_name = song_names_iter.next().expect("Song names ended early");
+            let song_name = song_names_iter
+                .next()
+                .ok_or(Error::SkillAttackHtmlParseError("song names ended early"))??;
             skill_attack_songs.push(SkillAttackSong {
                 skill_attack_index: song_index,
                 song_name,
@@ -213,6 +258,7 @@ fn decode_html_escapes(input: &str) -> Cow<'_, str> {
     }
 }
 
+// TODO error or saturate if we try to parse a number bigger than 2^32
 fn parse_number_with_commas(input: &str) -> Option<u32> {
     match input {
         "" | "-" => None,

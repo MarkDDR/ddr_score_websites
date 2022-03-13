@@ -17,4 +17,6 @@ pub enum Error {
     SanbaiScoreJsonParseError(reqwest::Error),
     #[error("Couldn't parse the bpm html, something may have changed")]
     SanbaiBpmHtmlParseError,
+    #[error("Couldn't parse skill attack html, something may have changed")]
+    SkillAttackHtmlParseError(&'static str),
 }

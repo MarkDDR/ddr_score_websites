@@ -114,12 +114,13 @@ impl<'query> SearchQuery<'query> {
                         }
                     })
                 {
-                    // exact match, return right away
-                    if song.search_names.first() == Some(&query) {
-                        return SearchResult::new(song, chart_and_level);
-                    }
                     // fuzzy match over each name/nickname
                     'next_name: for search_name in &song.search_names {
+                        // exact match, return right away
+                        // This makes it so searching "bi" matches the right song
+                        if search_name == &query {
+                            return SearchResult::new(song, chart_and_level);
+                        }
                         for query_word in query.split_whitespace() {
                             if !search_name.contains(query_word) {
                                 continue 'next_name;
