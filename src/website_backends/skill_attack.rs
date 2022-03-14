@@ -107,16 +107,12 @@ fn get_scores_and_song_inner(
     })
     .map(|index| index.map(|index| (&webpage[index..]).lines().next().unwrap()))
     .map(|line| {
-        line.and_then(|line| {
-            INSIDE_ARRAY
-                .captures(line)
-                .ok_or(Error::SkillAttackHtmlParseError("array regex capture"))
-                .and_then(|cap| {
-                    cap.get(1)
-                        .map(|s| s.as_str())
-                        .ok_or(Error::SkillAttackHtmlParseError("array regex match"))
-                })
-        })
+        INSIDE_ARRAY
+            .captures(line?)
+            .ok_or(Error::SkillAttackHtmlParseError("array regex capture"))?
+            .get(1)
+            .map(|s| s.as_str())
+            .ok_or(Error::SkillAttackHtmlParseError("array regex match"))
     })
     .collect::<Result<Vec<_>>>()?;
 

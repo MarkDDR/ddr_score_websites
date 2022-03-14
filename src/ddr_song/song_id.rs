@@ -11,6 +11,8 @@ const ALPHABET: &[u8; 16] = b"01689DIOPQbdiloq";
 /// # Examples
 ///
 /// ```
+/// use score_websites::ddr_song::SongId;
+///
 /// let song_id_str = "bIlqP91O9ld1lqlq6qoq9OiPdqIDPP0l";
 /// let other_id_str = "QD9Ib18D9lIO10O19d16PbPb68q1190d";
 ///
