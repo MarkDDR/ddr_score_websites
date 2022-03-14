@@ -1,9 +1,12 @@
 use std::{borrow::Cow, collections::HashMap};
 
+use crate::ddr_song::SongId;
 use crate::error::{Error, Result};
 use crate::HttpClient;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde::Deserialize;
+use std::result::Result as StdResult;
 use tracing::info;
 
 use crate::scores::{LampType, ScoreRow, Scores};
@@ -16,12 +19,70 @@ pub struct SkillAttackSong {
     pub song_name: String,
 }
 
-// #[derive(Debug, Clone)]
-// pub struct SkillAttackScores {
-//     pub ddr_code: u32,
-//     pub username: String,
-//     pub song_score: HashMap<SkillAttackIndex, Scores>,
-// }
+#[derive(Debug, Deserialize, Clone)]
+pub struct SkillAttackSongReal {
+    pub skill_attack_index: SkillAttackIndex,
+    pub song_id: SongId,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub gsp: Option<u8>,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub bsp: Option<u8>,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub dsp: Option<u8>,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub esp: Option<u8>,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub csp: Option<u8>,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub bdp: Option<u8>,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub ddp: Option<u8>,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub edp: Option<u8>,
+    #[serde(deserialize_with = "nonpositive_to_none")]
+    pub cdp: Option<u8>,
+    #[serde(deserialize_with = "serde_decode_html_escapes")]
+    pub song_name: String,
+    #[serde(deserialize_with = "serde_decode_html_escapes")]
+    pub artist_name: String,
+}
+
+fn serde_decode_html_escapes<'de, D>(deserializer: D) -> StdResult<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = <&str>::deserialize(deserializer)?;
+    Ok(html_escape::decode_html_entities(s).into_owned())
+}
+
+fn nonpositive_to_none<'de, D>(deserializer: D) -> StdResult<Option<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let num = <i8>::deserialize(deserializer)?;
+    Ok(if num > 0 { Some(num as u8) } else { None })
+}
+
+pub async fn get_skill_attack_songs(http: HttpClient) -> Result<Vec<SkillAttackSongReal>> {
+    info!("Fetching Skill Attack song list");
+    let url = "http://skillattack.com/sa4/data/master_music.txt";
+    let master_list = http
+        .get(url)
+        .send()
+        .await?
+        .text_with_charset("Shift_JIS")
+        .await?;
+    info!("Skill Attack song list fetched");
+    let mut tsv_reader = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .has_headers(false)
+        .quoting(false)
+        .from_reader(master_list.as_bytes());
+
+    Ok(tsv_reader
+        .deserialize::<SkillAttackSongReal>()
+        .collect::<StdResult<Vec<_>, _>>()?)
+}
 
 pub type SkillAttackScores = HashMap<SkillAttackIndex, Scores>;
 
@@ -36,7 +97,7 @@ pub async fn get_scores(http: HttpClient, ddr_code: u32) -> Result<SkillAttackSc
     Ok(user_scores)
 }
 
-fn cut_webpage(webpage: &str) -> Result<&str> {
+pub fn cut_webpage(webpage: &str) -> Result<&str> {
     let s_name_index = webpage
         .find("sName")
         .ok_or(Error::OtherParseError("couldn't find \"sName\" in html"))?;
@@ -73,7 +134,7 @@ async fn get_skill_attack_webpage(http: HttpClient, ddr_code: u32) -> Result<Str
 
 // This code is so ugly, I'm sorry
 // Maybe this can get replaced with a better more robust parser in the future
-fn get_scores_and_song_inner(
+pub fn get_scores_and_song_inner(
     webpage: &str,
     get_songs: bool,
 ) -> Result<(SkillAttackScores, Vec<SkillAttackSong>)> {

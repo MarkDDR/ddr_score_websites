@@ -19,4 +19,6 @@ pub enum Error {
     SanbaiBpmHtmlParseError,
     #[error("Couldn't parse skill attack html, something may have changed")]
     SkillAttackHtmlParseError(&'static str),
+    #[error("Couldn't parse master song list")]
+    SkillAttackTsvParseError(#[from] csv::Error),
 }
