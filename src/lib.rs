@@ -69,15 +69,11 @@ impl DDRDatabase {
                 })
             })
             .collect();
-        let sa_song_list = tokio::spawn(skill_attack::get_scores_and_song_data(
-            http.clone(),
-            self.players[0].ddr_code,
-        ));
+        let sa_song_list = tokio::spawn(skill_attack::get_skill_attack_songs(http.clone()));
         let mut sa_user_scores: FuturesUnordered<_> = self
             .players
             .iter()
             .enumerate()
-            .skip(1)
             .map(|(i, p)| {
                 let http = http.clone();
                 let ddr_code = p.ddr_code;
@@ -102,7 +98,7 @@ impl DDRDatabase {
                 skill_attack_songs = &mut sa_song_list, if !songs_updated => {
                     // TODO handle skill attack being down and skip/update just sanbai songs
                     // TODO Keep old song list in mind and just update entries
-                    let (first_player_scores, skill_attack_songs) = skill_attack_songs.expect("sa song task panicked")?;
+                    let skill_attack_songs = skill_attack_songs.expect("sa song task panicked")?;
                     let new_song_list = DDRSong::from_combining_song_lists(&sanbai_songs, &skill_attack_songs);
                     num_new_songs = match new_song_list.len().checked_sub(self.songs.len()) {
                         Some(n) => n,
@@ -112,8 +108,6 @@ impl DDRDatabase {
                         }
                     };
                     self.songs = new_song_list;
-                    let first_player = &mut self.players[0];
-                    num_new_scores += process_skill_attack_score(first_player, first_player_scores, &self.songs);
                     songs_updated = true;
 
                 },

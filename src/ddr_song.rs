@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 use tracing::{info, warn};
@@ -33,11 +35,6 @@ impl DDRSong {
             .chain(sanbai.romanized_name.as_deref())
             .chain(sanbai.alternate_name.iter().flat_map(|s| s.split('/')))
             .chain(sanbai.searchable_name.iter().flat_map(|s| s.split('/')))
-            // TODO change the sanbai struct for those names to be `Vec<String>`, split by '/'
-            // Multiple names in sanbai are delimated by '/'. The only
-            // song in DDR with '/' in its title atm is "I/O", which doesn't
-            // have any alternate names. To account for this though we do this split
-            // before we add the "raw song name" to the search names
             .map(|s| s.to_lowercase())
             .collect();
         Self {
@@ -57,76 +54,39 @@ impl DDRSong {
         sanbai_songs: &[SanbaiSong],
         skill_attack_songs: &[SkillAttackSong],
     ) -> Vec<Self> {
-        let sa_normalized = {
-            let mut sa_normalized = skill_attack_songs
-                .iter()
-                .map(|s| (normalize_name(&s.song_name), s))
-                .collect::<Vec<_>>();
-            sa_normalized.sort_by(|(a, _), (b, _)| a.cmp(b));
-            sa_normalized
-        };
-        let sanbai_normalized = {
-            let mut sanbai_normalized = sanbai_songs
-                .iter()
-                .map(|s| (normalize_name(&s.song_name), s))
-                .collect::<Vec<_>>();
-            sanbai_normalized.sort_by(|(a, _), (b, _)| a.cmp(b));
-            sanbai_normalized
-        };
+        info!("Combining sanbai and skill attack song lists");
+        let mut ddr_song_map: HashMap<SongId, Self> = sanbai_songs
+            .iter()
+            .map(|s| {
+                (
+                    s.song_id.clone(),
+                    Self::new_from_sanbai_and_skillattack(&s, None),
+                )
+            })
+            .collect();
 
-        let mut ddr_songs = vec![];
-        let mut sa_index = 0;
-        let mut sanbai_index = 0;
-
-        loop {
-            let (sa_candidate, sanbai_candidate) = match (
-                sa_normalized.get(sa_index),
-                sanbai_normalized.get(sanbai_index),
-            ) {
-                (Some(a), Some(b)) => (a, b),
-                (None, Some((_, sanbai_song))) => {
-                    info!("Leftover song in sanbai: {}", sanbai_song.song_name);
-                    ddr_songs.push(Self::new_from_sanbai_and_skillattack(sanbai_song, None));
-                    sanbai_index += 1;
-                    continue;
-                }
-                _ => break,
-            };
-
-            match sa_candidate.0.cmp(&sanbai_candidate.0) {
-                std::cmp::Ordering::Equal => {
-                    // match, add to vec
-                    ddr_songs.push(Self::new_from_sanbai_and_skillattack(
-                        sanbai_candidate.1,
-                        Some(sa_candidate.1),
-                    ));
-                    sa_index += 1;
-                    sanbai_index += 1;
-                }
-                std::cmp::Ordering::Greater => {
-                    // only in sanbai, add to vec
-                    // usually this means it is a newer song not yet added to SA
-                    // info!("Only in Sanbai, adding: {}", sanbai_candidate.1.song_name);
-                    ddr_songs.push(Self::new_from_sanbai_and_skillattack(
-                        sanbai_candidate.1,
-                        None,
-                    ));
-                    sanbai_index += 1;
-                }
-                std::cmp::Ordering::Less => {
-                    // only in SA, ignore
-                    // songs that are only in skill attack are old songs that have been
-                    // gone for a long time
-                    // info!(
-                    //     "Only in Skill Attack, ignoring: {}",
-                    //     sa_candidate.1.song_name
-                    // );
-                    sa_index += 1;
-                }
+        for sa_song in skill_attack_songs {
+            // If we don't find a corresponding song in the map, that means that
+            // it is usually an old skill attack song that hasn't been in the game
+            // for many many years
+            // We are ignoring the possibility that Skill Attack somehow updated its
+            // song list before Sanbai, as Sanbai is generally much faster and more
+            // on top of its song list. Sanbai also usually has more information about the
+            // song so we consider it more valuable than only having skill attack info
+            if let Some(ddr_song) = ddr_song_map.get_mut(&sa_song.song_id) {
+                // TODO sanity check on difficulties? If only to emit a warning in the logs
+                // TODO sanity check on song name? We already know that Sanbai changed some of
+                // the names slightly at first in attempt to make searching easier, like
+                // by changing some full width characters to half width, some smart quotes, etc.
+                ddr_song.skill_attack_index = Some(sa_song.skill_attack_index);
             }
         }
 
-        ddr_songs
+        let mut out: Vec<_> = ddr_song_map.into_values().collect();
+        // Sort for consistency
+        out.sort_by(|a, b| a.song_name.cmp(&b.song_name));
+        info!("Combining complete");
+        out
     }
 
     pub async fn fetch_bpm(&self, http: HttpClient) -> Result<Option<Bpm>> {
@@ -234,28 +194,28 @@ impl Chart {
 // - a couple of smart quotes (over the "period", dreamin')
 // - Qipchāq and Qipchãq
 // - … and ...
-/// Normalize a song name so that slight irregularties in how the name was spelt are ignored
-/// when compared
-fn normalize_name(input: &str) -> String {
-    input
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .map(|c| match c {
-            '！' => '!',
-            '（' => '(',
-            '）' => ')',
-            '“' | '”' => '"',
-            'ã' | 'ā' => 'a',
-            '＋' => '+',
-            '’' => '\'',
-            _ => c,
-        })
-        .flat_map(|c| {
-            if c == '…' {
-                std::iter::repeat('.').take(3)
-            } else {
-                std::iter::repeat(c).take(1)
-            }
-        })
-        .collect()
-}
+// /// Normalize a song name so that slight irregularties in how the name was spelt are ignored
+// /// when compared
+// fn normalize_name(input: &str) -> String {
+//     input
+//         .chars()
+//         .filter(|c| !c.is_whitespace())
+//         .map(|c| match c {
+//             '！' => '!',
+//             '（' => '(',
+//             '）' => ')',
+//             '“' | '”' => '"',
+//             'ã' | 'ā' => 'a',
+//             '＋' => '+',
+//             '’' => '\'',
+//             _ => c,
+//         })
+//         .flat_map(|c| {
+//             if c == '…' {
+//                 std::iter::repeat('.').take(3)
+//             } else {
+//                 std::iter::repeat(c).take(1)
+//             }
+//         })
+//         .collect()
+// }
