@@ -103,12 +103,12 @@ pub async fn get_scores(http: HttpClient, ddr_code: u32) -> Result<SkillAttackSc
     let webpage = cut_webpage(&webpage)?;
     info!("got SA webpage");
 
-    let user_scores = get_scores_and_song_inner(webpage)?;
+    let user_scores = get_scores_inner(webpage)?;
 
     Ok(user_scores)
 }
 
-fn cut_webpage(webpage: &str) -> Result<&str> {
+pub fn cut_webpage(webpage: &str) -> Result<&str> {
     let s_name_index = webpage
         .find("sName")
         .ok_or(Error::OtherParseError("couldn't find \"sName\" in html"))?;
@@ -118,7 +118,7 @@ fn cut_webpage(webpage: &str) -> Result<&str> {
 
 // This code is so ugly, I'm sorry
 // Maybe this can get replaced with a better more robust parser in the future
-fn get_scores_and_song_inner(webpage: &str) -> Result<SkillAttackScores> {
+pub fn get_scores_inner(webpage: &str) -> Result<SkillAttackScores> {
     // A regex that extracts the inside of an Array
     // e.g. "blah blah = new Array(inside part);" will give "inside part"
     static INSIDE_ARRAY: Lazy<Regex> = Lazy::new(|| Regex::new(r"Array\((.+)\);$").unwrap());
@@ -158,7 +158,8 @@ fn get_scores_and_song_inner(webpage: &str) -> Result<SkillAttackScores> {
     .collect::<Result<Vec<_>>>()?;
 
     let song_indices_iter = array_contents[0].split(',').map(|s| {
-        s.parse::<SkillAttackIndex>()
+        s.trim()
+            .parse::<SkillAttackIndex>()
             .map_err(|_| Error::SkillAttackHtmlParseError("index parse"))
     });
 
@@ -177,6 +178,7 @@ fn get_scores_and_song_inner(webpage: &str) -> Result<SkillAttackScores> {
         .map(|s| {
             s.split(',').map(|num_str| {
                 let combo_index = num_str
+                    .trim()
                     .parse::<u8>()
                     .map_err(|_| Error::SkillAttackHtmlParseError("combo type num wasn't u8"))?;
                 LampType::from_skill_attack_index(combo_index).ok_or(
