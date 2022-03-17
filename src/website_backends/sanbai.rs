@@ -82,6 +82,7 @@ impl SanbaiSong {
 pub enum DDRVersion {
     #[serde(other)]
     UnknownVersion,
+    DDRA3 = 19,
     DDRA20Plus = 18,
     DDRA20 = 17,
     DDRA = 16,
@@ -105,6 +106,7 @@ pub enum DDRVersion {
 impl fmt::Display for DDRVersion {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
+            DDRVersion::DDRA3 => write!(f, "Dance Dance Revolution A3"),
             DDRVersion::DDRA20Plus => write!(f, "Dance Dance Revolution A20 PLUS"),
             DDRVersion::DDRA20 => write!(f, "Dance Dance Revolution A20"),
             DDRVersion::DDRA => write!(f, "Dance Dance Revolution A"),
