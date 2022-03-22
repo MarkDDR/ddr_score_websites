@@ -103,12 +103,12 @@ pub async fn get_scores(http: HttpClient, ddr_code: u32) -> Result<SkillAttackSc
     let webpage = cut_webpage(&webpage)?;
     info!("got SA webpage");
 
-    let user_scores = get_scores_and_song_inner(webpage)?;
+    let user_scores = get_scores_inner(webpage)?;
 
     Ok(user_scores)
 }
 
-fn cut_webpage(webpage: &str) -> Result<&str> {
+pub fn cut_webpage(webpage: &str) -> Result<&str> {
     let s_name_index = webpage
         .find("sName")
         .ok_or(Error::OtherParseError("couldn't find \"sName\" in html"))?;
@@ -118,7 +118,7 @@ fn cut_webpage(webpage: &str) -> Result<&str> {
 
 // This code is so ugly, I'm sorry
 // Maybe this can get replaced with a better more robust parser in the future
-fn get_scores_and_song_inner(webpage: &str) -> Result<SkillAttackScores> {
+pub fn get_scores_inner(webpage: &str) -> Result<SkillAttackScores> {
     // A regex that extracts the inside of an Array
     // e.g. "blah blah = new Array(inside part);" will give "inside part"
     static INSIDE_ARRAY: Lazy<Regex> = Lazy::new(|| Regex::new(r"Array\((.+)\);$").unwrap());
@@ -157,98 +157,76 @@ fn get_scores_and_song_inner(webpage: &str) -> Result<SkillAttackScores> {
     })
     .collect::<Result<Vec<_>>>()?;
 
-    let song_indices_iter = array_contents[0].split(',').map(|s| {
-        s.parse::<SkillAttackIndex>()
-            .map_err(|_| Error::SkillAttackHtmlParseError("index parse"))
-    });
+    let song_indices = array_contents[0]
+        .split(',')
+        .map(|s| {
+            s
+                // .trim()
+                .parse::<SkillAttackIndex>()
+                .map_err(|_| Error::SkillAttackHtmlParseError("index parse"))
+        })
+        .collect::<Result<Vec<_>>>()?;
 
-    let mut scores: Vec<_> = (&array_contents[1..6])
+    let scores: Vec<Vec<_>> = (&array_contents[1..6])
         .iter()
         .map(|s| {
-            QUOTED_TEXT.captures_iter(s).map(|cap| {
-                cap.name("text")
-                    .map(|s| parse_number_with_commas(s.as_str()))
-                    .ok_or(Error::SkillAttackHtmlParseError("score regex match"))
-            })
+            QUOTED_TEXT
+                .captures_iter(s)
+                .map(|cap| {
+                    cap.name("text")
+                        .map(|s| parse_number_with_commas(s.as_str()))
+                        .ok_or(Error::SkillAttackHtmlParseError("score regex match"))
+                })
+                .collect::<Result<Vec<_>>>()
         })
-        .collect();
-    let mut combo_types: Vec<_> = (&array_contents[6..])
+        .collect::<Result<Vec<Vec<_>>>>()?;
+    let combo_types: Vec<Vec<_>> = (&array_contents[6..])
         .iter()
         .map(|s| {
-            s.split(',').map(|num_str| {
-                let combo_index = num_str
-                    .parse::<u8>()
-                    .map_err(|_| Error::SkillAttackHtmlParseError("combo type num wasn't u8"))?;
-                LampType::from_skill_attack_index(combo_index).ok_or(
-                    Error::SkillAttackHtmlParseError("Unrecognized skill attack lamp type"),
-                )
-            })
+            s.split(',')
+                .map(|num_str| {
+                    let combo_index = num_str
+                        // .trim()
+                        .parse::<u8>()
+                        .map_err(|_| {
+                            Error::SkillAttackHtmlParseError("combo type num wasn't u8")
+                        })?;
+                    LampType::from_skill_attack_index(combo_index).ok_or(
+                        Error::SkillAttackHtmlParseError("Unrecognized skill attack lamp type"),
+                    )
+                })
+                .collect::<Result<Vec<_>>>()
         })
-        .collect();
+        .collect::<Result<Vec<Vec<_>>>>()?;
 
     let mut user_scores = HashMap::new();
 
+    if !scores
+        .iter()
+        .map(|v| v.len())
+        .chain(combo_types.iter().map(|v| v.len()))
+        .all(|l| l == song_indices.len())
+    {
+        return Err(Error::SkillAttackHtmlParseError(
+            "Array lengths didn't match!",
+        ));
+    }
+
     info!("Started parsing SA songs");
-    for song_index in song_indices_iter {
-        let song_index = song_index?;
-        // TODO make this cleaner
-        let g_score = scores[0].next().ok_or(Error::SkillAttackHtmlParseError(
-            "beginner score ended early",
-        ))??;
-        let g_lamp = combo_types[0]
-            .next()
-            .ok_or(Error::SkillAttackHtmlParseError(
-                "beginner lamps ended early",
-            ))??;
-        let b_score = scores[1]
-            .next()
-            .ok_or(Error::SkillAttackHtmlParseError("basic score ended early"))??;
-        let b_lamp = combo_types[1]
-            .next()
-            .ok_or(Error::SkillAttackHtmlParseError("basic lamps ended early"))??;
-        let d_score = scores[2].next().ok_or(Error::SkillAttackHtmlParseError(
-            "difficult score ended early",
-        ))??;
-        let d_lamp = combo_types[2]
-            .next()
-            .ok_or(Error::SkillAttackHtmlParseError(
-                "difficult lamps ended early",
-            ))??;
-        let e_score = scores[3]
-            .next()
-            .ok_or(Error::SkillAttackHtmlParseError("expert score ended early"))??;
-        let e_lamp = combo_types[3]
-            .next()
-            .ok_or(Error::SkillAttackHtmlParseError("expert lamps ended early"))??;
-        let c_score = scores[4].next().ok_or(Error::SkillAttackHtmlParseError(
-            "challenge score ended early",
-        ))??;
-        let c_lamp = combo_types[4]
-            .next()
-            .ok_or(Error::SkillAttackHtmlParseError(
-                "challenge lamps ended early",
-            ))??;
+    for (i, song_index) in song_indices.into_iter().enumerate() {
+        let score_rows = [0, 1, 2, 3, 4].map(|diff_index| {
+            scores[diff_index][i].map(|s| ScoreRow {
+                score: s,
+                lamp: combo_types[diff_index][i],
+            })
+        });
+
         let scores = Scores {
-            beg_score: g_score.map(|s| ScoreRow {
-                score: s,
-                lamp: g_lamp,
-            }),
-            basic_score: b_score.map(|s| ScoreRow {
-                score: s,
-                lamp: b_lamp,
-            }),
-            diff_score: d_score.map(|s| ScoreRow {
-                score: s,
-                lamp: d_lamp,
-            }),
-            expert_score: e_score.map(|s| ScoreRow {
-                score: s,
-                lamp: e_lamp,
-            }),
-            chal_score: c_score.map(|s| ScoreRow {
-                score: s,
-                lamp: c_lamp,
-            }),
+            beg_score: score_rows[0],
+            basic_score: score_rows[1],
+            diff_score: score_rows[2],
+            expert_score: score_rows[3],
+            chal_score: score_rows[4],
         };
         user_scores.insert(song_index, scores);
     }
