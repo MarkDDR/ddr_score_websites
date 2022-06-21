@@ -7,8 +7,9 @@ use tokio_stream::StreamExt;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CourseSerializeInfo {
     pub name: String,
-    pub search_names: Option<Vec<String>>,
-    pub songs: [Option<SongId>; 4],
+    #[serde(default)]
+    pub search_names: Vec<String>,
+    pub songs: Vec<SongId>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,10 +31,7 @@ impl Course {
             .songs
             .into_iter()
             .map(|id| {
-                let ddr_song = match id {
-                    Some(id) => ddr_songs.iter().find(|s| s.song_id == id).cloned(),
-                    None => None,
-                };
+                let ddr_song = ddr_songs.iter().find(|s| s.song_id == id).cloned();
                 let http = http.clone();
                 async move {
                     match ddr_song {
@@ -51,7 +49,7 @@ impl Course {
             songs.push(res);
         }
 
-        let mut search_names = info.search_names.unwrap_or(Vec::new());
+        let mut search_names = info.search_names;
         search_names.push(info.name.to_lowercase());
         Ok(Self {
             name: info.name,
