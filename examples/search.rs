@@ -1,4 +1,5 @@
 use std::cmp::Reverse;
+use std::time::Duration;
 
 use anyhow::Result;
 use num_format::{Locale, ToFormattedString};
@@ -9,7 +10,10 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> Result<()> {
     setup();
-    let http = score_websites::HttpClient::new();
+    let http = score_websites::HttpClient::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(10))
+        .build()?;
 
     let users = [
         (51527130, "MARK", "werecat"),
@@ -34,7 +38,7 @@ async fn main() -> Result<()> {
             .expect("Couldn't read line");
         let search = input.trim();
 
-        let query = match SearchQuery::parse_query(&search) {
+        let query = match SearchQuery::parse_query(&search, false) {
             Ok(query) => query,
             Err(_) => {
                 println!("Error: Not enough arguments");

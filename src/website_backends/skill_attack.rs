@@ -134,11 +134,19 @@ pub fn get_scores_inner(webpage: &str) -> Result<SkillAttackScores> {
         "dsScoreDsp",
         "dsScoreEsp",
         "dsScoreCsp",
+        "dsScoreBdp",
+        "dsScoreDdp",
+        "dsScoreEdp",
+        "dsScoreCdp",
         "ddFcGsp",
         "ddFcBsp",
         "ddFcDsp",
         "ddFcEsp",
         "ddFcCsp",
+        "ddFcBdp",
+        "ddFcDdp",
+        "ddFcEdp",
+        "ddFcCdp",
     ]
     .iter()
     .map(|name| {
@@ -167,7 +175,7 @@ pub fn get_scores_inner(webpage: &str) -> Result<SkillAttackScores> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let scores: Vec<Vec<_>> = (&array_contents[1..6])
+    let scores: Vec<Vec<_>> = (&array_contents[1..10])
         .iter()
         .map(|s| {
             QUOTED_TEXT
@@ -180,7 +188,7 @@ pub fn get_scores_inner(webpage: &str) -> Result<SkillAttackScores> {
                 .collect::<Result<Vec<_>>>()
         })
         .collect::<Result<Vec<Vec<_>>>>()?;
-    let combo_types: Vec<Vec<_>> = (&array_contents[6..])
+    let combo_types: Vec<Vec<_>> = (&array_contents[10..])
         .iter()
         .map(|s| {
             s.split(',')
@@ -214,10 +222,11 @@ pub fn get_scores_inner(webpage: &str) -> Result<SkillAttackScores> {
 
     info!("Started parsing SA songs");
     for (i, song_index) in song_indices.into_iter().enumerate() {
-        let score_rows = [0, 1, 2, 3, 4].map(|diff_index| {
+        let score_rows = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(|diff_index| {
             scores[diff_index][i].map(|s| ScoreRow {
                 score: s,
                 lamp: combo_types[diff_index][i],
+                time_played: None,
             })
         });
 
@@ -227,6 +236,10 @@ pub fn get_scores_inner(webpage: &str) -> Result<SkillAttackScores> {
             diff_score: score_rows[2],
             expert_score: score_rows[3],
             chal_score: score_rows[4],
+            doubles_basic_score: score_rows[5],
+            doubles_diff_score: score_rows[6],
+            doubles_expert_score: score_rows[7],
+            doubles_chal_score: score_rows[8],
         };
         user_scores.insert(song_index, scores);
     }

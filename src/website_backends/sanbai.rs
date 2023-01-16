@@ -138,6 +138,10 @@ impl Difficulties {
         self.0[0..5].contains(&difficulty)
     }
 
+    pub fn contains_doubles(&self, difficulty: u8) -> bool {
+        self.0[5..].contains(&difficulty)
+    }
+
     /// Returns true if the song has a CSP or CDP chart
     pub fn has_challenge_chart(&self) -> bool {
         self.0[4] > 0
@@ -150,6 +154,10 @@ impl Difficulties {
 
     pub fn single_difficulties(&self) -> [u8; 5] {
         self.0[0..5].try_into().unwrap()
+    }
+
+    pub fn doubles_difficulties(&self) -> [u8; 4] {
+        self.0[5..].try_into().unwrap()
     }
 }
 
@@ -190,13 +198,15 @@ pub struct LockTypes(pub [i32; 9]);
 // 4 = greatFC
 // 5 = PFC
 // 6 = MFC
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct SanbaiScoreEntry {
     pub song_id: SongId,
     pub difficulty: u8,
     pub score: u32,
     #[serde(deserialize_with = "num_to_sanbai_combo")]
     pub lamp: LampType,
+    #[serde(with = "time::serde::timestamp")]
+    pub time_played: time::OffsetDateTime,
 }
 
 fn num_to_sanbai_combo<'de, D>(deserializer: D) -> StdResult<LampType, D::Error>
@@ -236,4 +246,36 @@ pub async fn get_sanbai_scores(http: HttpClient, username: &str) -> Result<Vec<S
     };
     info!("Received sanbai scores");
     Ok(scores_outer.scores)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn sanbai_score_entry_deser() {
+        let json = r#"{ "scores": [
+              {
+                 "song_id": "0088dOQPiD0Qb0Dl8ol09D98IOllI1id",
+                 "SP_or_DP": 0,
+                 "difficulty": 2,
+                 "score": 989350,
+                 "prev_score": 983570,
+                 "lamp": 4,
+                 "time_played": 1620500291,
+                 "time_scraped": 1620522577
+              }]}"#;
+        let deser: SanbaiScoreOuter = serde_json::from_str(json).unwrap();
+        let inner = &deser.scores[0];
+
+        let expected = SanbaiScoreEntry {
+            song_id: "0088dOQPiD0Qb0Dl8ol09D98IOllI1id".parse().unwrap(),
+            difficulty: 2,
+            score: 989350,
+            lamp: LampType::GreatCombo,
+            time_played: time::macros::datetime!(2021-05-08 18:58:11.0 UTC),
+        };
+
+        assert_eq!(inner, &expected);
+    }
 }

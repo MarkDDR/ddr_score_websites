@@ -87,7 +87,8 @@ impl DDRDatabase {
         let sanbai_songs = sanbai_song_list.await.expect("sanbai song task panicked")?;
 
         tokio::pin!(sa_song_list);
-        let mut songs_updated = false;
+        let mut sa_songs_updated = false;
+        let mut skip_skill_attack = false;
         let mut num_new_songs = 0;
         // FIXME double counting if skill attack score updates first and
         // then sanbai score and sanbai score had more better lamp accuracy
@@ -95,10 +96,26 @@ impl DDRDatabase {
         // await on all the futures and handle each as they finish
         loop {
             tokio::select! {
-                skill_attack_songs = &mut sa_song_list, if !songs_updated => {
+                // update self.songs with combined skill attack/sanbai list.
+                // If skill attack is down, then just update with sanbai list
+                skill_attack_songs = &mut sa_song_list, if !sa_songs_updated && !skip_skill_attack => {
                     // TODO handle skill attack being down and skip/update just sanbai songs
                     // TODO Keep old song list in mind and just update entries
-                    let skill_attack_songs = skill_attack_songs.expect("sa song task panicked")?;
+                    let skill_attack_songs = match skill_attack_songs.expect("sa song task panicked") {
+                        Ok(x) => x,
+                        Err(e) => {
+                            let song_list_without_skill_attack: Vec<_> = sanbai_songs
+                                .iter()
+                                .map(|song| DDRSong::new_from_sanbai_and_skillattack(song, None))
+                                .collect();
+                            self.songs = song_list_without_skill_attack;
+                            warn!("ERROR: {:?}", e);
+                            warn!("ERROR: Skill attack seems to be down, or has changed its format");
+                            skip_skill_attack = true;
+                            continue;
+                        }
+                    };
+                    // let skill_attack_songs = skill_attack_songs.expect("sa song task panicked")?;
                     let new_song_list = DDRSong::from_combining_song_lists(&sanbai_songs, &skill_attack_songs);
                     num_new_songs = match new_song_list.len().checked_sub(self.songs.len()) {
                         Some(n) => n,
@@ -108,9 +125,10 @@ impl DDRDatabase {
                         }
                     };
                     self.songs = new_song_list;
-                    songs_updated = true;
+                    sa_songs_updated = true;
 
                 },
+                // add sanbai user score
                 Some(res) = sanbai_user_scores.next() => {
                     let (player_index, sanbai_scores) = res.expect("sanbai user score task panicked")?;
                     let player = &mut self.players[player_index];
@@ -136,7 +154,8 @@ impl DDRDatabase {
                         }
                     }
                 },
-                Some(res) = sa_user_scores.next(), if songs_updated => {
+                // add skill attack user score
+                Some(res) = sa_user_scores.next(), if sa_songs_updated && !skip_skill_attack => {
                     let (player_index, sa_scores) = res.expect("sa user score task panicked")?;
                     let player = &mut self.players[player_index];
                     num_new_scores += process_skill_attack_score(player, sa_scores, &self.songs);
@@ -178,6 +197,21 @@ fn process_skill_attack_score(
     }
     num_new_scores
 }
+
+// #[derive(Debug, Clone)]
+// pub struct UpdateInfo {
+//     num_new_songs: usize,
+//     new_pbs: Vec<PlayerNewPbs>,
+// }
+
+// #[derive(Debug, Clone)]
+// pub struct PlayerNewPbs {
+//     pub player_name: String,
+//     pub total_new_pbs: usize,
+//     pub num_new_aaas: usize,
+//     pub num_new_pfcs: usize,
+//     pub num_new_mfcs: usize,
+// }
 
 #[cfg(test)]
 mod tests {

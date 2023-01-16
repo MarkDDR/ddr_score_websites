@@ -3,6 +3,8 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+use time::OffsetDateTime;
+
 use crate::{ddr_song::SongId, website_backends::sanbai::SanbaiScoreEntry};
 
 /// The scores and lamp for every difficulty of a specific song
@@ -13,6 +15,10 @@ pub struct Scores {
     pub diff_score: Option<ScoreRow>,
     pub expert_score: Option<ScoreRow>,
     pub chal_score: Option<ScoreRow>,
+    pub doubles_basic_score: Option<ScoreRow>,
+    pub doubles_diff_score: Option<ScoreRow>,
+    pub doubles_expert_score: Option<ScoreRow>,
+    pub doubles_chal_score: Option<ScoreRow>,
 }
 
 impl Scores {
@@ -21,7 +27,7 @@ impl Scores {
     /// Returns number of scores updated
     pub fn update(&mut self, other: &Self) -> usize {
         let mut num_updated = 0;
-        for level_index in 0..=4 {
+        for level_index in 0..=8 {
             let new_score = match (self[level_index], other[level_index]) {
                 (Some(our_score), Some(other_score)) => Some(our_score.maximize(other_score)),
                 (None, Some(only_score)) | (Some(only_score), None) => Some(only_score),
@@ -40,9 +46,9 @@ impl Scores {
     /// Returns `true` if stored score changed
     pub fn update_from_sanbai_score_entry(&mut self, sanbai_entry: &SanbaiScoreEntry) -> bool {
         // FIXME we are ignoring doubles scores for now
-        if sanbai_entry.difficulty > 4 {
-            return false;
-        }
+        // if sanbai_entry.difficulty > 4 {
+        //     return false;
+        // }
         let score_combo = &mut self[sanbai_entry.difficulty as usize];
         let old_score_combo = score_combo.clone();
 
@@ -55,6 +61,7 @@ impl Scores {
                 *score_combo = Some(ScoreRow {
                     score: sanbai_entry.score,
                     lamp: sanbai_entry.lamp,
+                    time_played: Some(sanbai_entry.time_played),
                 });
             }
         };
@@ -76,6 +83,10 @@ impl Index<usize> for Scores {
             2 => &self.diff_score,
             3 => &self.expert_score,
             4 => &self.chal_score,
+            5 => &self.doubles_basic_score,
+            6 => &self.doubles_diff_score,
+            7 => &self.doubles_expert_score,
+            8 => &self.doubles_chal_score,
             _ => panic!("Invalid score index"),
         }
     }
@@ -89,6 +100,10 @@ impl IndexMut<usize> for Scores {
             2 => &mut self.diff_score,
             3 => &mut self.expert_score,
             4 => &mut self.chal_score,
+            5 => &mut self.doubles_basic_score,
+            6 => &mut self.doubles_diff_score,
+            7 => &mut self.doubles_expert_score,
+            8 => &mut self.doubles_chal_score,
             _ => panic!("Invalid score index"),
         }
     }
@@ -99,6 +114,7 @@ impl IndexMut<usize> for Scores {
 pub struct ScoreRow {
     pub score: u32,
     pub lamp: LampType,
+    pub time_played: Option<OffsetDateTime>,
 }
 
 impl ScoreRow {
@@ -108,24 +124,29 @@ impl ScoreRow {
     /// # Examples
     /// ```rust
     /// use score_websites::scores::{ScoreRow, LampType};
+    /// use time::macros::datetime;
     ///
     /// let score_a = ScoreRow {
     ///     score: 890_000,
     ///     lamp: LampType::GreatCombo,
+    ///     time_played: Some(datetime!(2022-01-01 12:00:00 UTC)),
     /// };
     /// let score_b = ScoreRow {
     ///     score: 950_000,
     ///     lamp: LampType::NoCombo,
+    ///     time_played: None,
     /// };
     /// assert_eq!(score_a.maximize(score_b), ScoreRow {
     ///     score: 950_000,
     ///     lamp: LampType::GreatCombo,
+    ///     time_played: Some(datetime!(2022-01-01 12:00:00 UTC)),
     /// });
     /// ```
     pub fn maximize(self, other: Self) -> Self {
         let mut new = self.clone();
         new.score = std::cmp::max(self.score, other.score);
         new.lamp = std::cmp::max(self.lamp, other.lamp);
+        new.time_played = std::cmp::max(self.time_played, other.time_played);
         new
     }
 }

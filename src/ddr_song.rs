@@ -169,11 +169,19 @@ pub enum Chart {
     DSP,
     ESP,
     CSP,
+    BDP,
+    DDP,
+    EDP,
+    CDP,
 }
 
 impl Chart {
     pub fn is_challenge(&self) -> bool {
         matches!(self, Chart::CSP)
+    }
+
+    pub fn is_doubles(&self) -> bool {
+        *self as u8 > 4
     }
 
     pub fn from_index(index: usize) -> Option<Self> {
@@ -183,11 +191,31 @@ impl Chart {
             2 => Self::DSP,
             3 => Self::ESP,
             4 => Self::CSP,
+            5 => Self::BDP,
+            6 => Self::DDP,
+            7 => Self::EDP,
+            8 => Self::CDP,
             _ => return None,
         })
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::Chart;
+    #[test]
+    fn chart_is_doubles() {
+        assert!(!Chart::GSP.is_doubles());
+        assert!(!Chart::BSP.is_doubles());
+        assert!(!Chart::DSP.is_doubles());
+        assert!(!Chart::ESP.is_doubles());
+        assert!(!Chart::CSP.is_doubles());
+        assert!(Chart::BDP.is_doubles());
+        assert!(Chart::DDP.is_doubles());
+        assert!(Chart::EDP.is_doubles());
+        assert!(Chart::CDP.is_doubles());
+    }
+}
 // Differences between Sanbai and Skill Attack/EAmuse site
 // - Space between song name and parenteticals `Possession(EDP Mix)`
 // - sometimes SA has full width parenthesis, `!`, `+`

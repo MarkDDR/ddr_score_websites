@@ -1,6 +1,63 @@
 (
-    // A20PLUS courses
+    // A20PLUS/A3 courses
     course_trials: [
+        (
+            name: "EXCITING WINTER",
+            songs: [
+                "19b01l0QPiDlDQb6lqd0dQ8Qlld6Dl6l",
+                "8l0ld8Oq86P09lb91DdD9OliiPq9oq9D",
+                "IQ9bDo1dPbIo0ODQiObbQ99iP1bOi8iI",
+                "oP8iIdilQ0QiDllqDbDIOl0iQPd9PQ9I",
+            ],
+        ),
+        (
+            name: "INTENSE",
+            songs: [
+                "iObdoO9b1O9o8dP8o0id9b1QioQ0q9q9",
+                "d91lIllbboPd668QP88I06Q6QqooQiO1",
+                "bdQ6IobP6II86I1io686Il9qQ69dOod1",
+                "lb969IOOoI06P18PPq81o1lPD1b1OqqI",
+            ],
+        ),
+        (
+            name: "CYBER",
+            songs: [
+                "9d0oQdIolIb0Po9b06QOiOP60IQlb8qO",
+                "qD8Q180QlIi11o1IiI6DPoqolqoD61Ib",
+                "8lDOiqP0biD8dD9lOQO619i1PqbqDiP8",
+                "dQdo08Qb6bOPIl8686DPDd60I1oqidIP",
+            ],
+        ),
+        (
+            name: "FEELING",
+            songs: [
+                "98PiPl8P0qlq8dd8P60Iq6dq899lbQDI",
+                "DddIPd6iId8Doqq8OibDlD1dOi8PO8o9",
+                "i8II16blIIbQQd196b616OPbPO910oi9",
+                "qi0lbbDIo8Qlo9IiD8oqqo69DIPQ1IIO",
+            ],
+        ),
+        (
+            name: "NIPPON-NO-MATSURI",
+            search_names: [
+                "nippon no matsuri"
+            ],
+            songs: [
+                "8Q8OiP8QPbl8bqID1loQq896ldPQd99o",
+                "io688qld6Pqq6bI01q86illP18biq0bd",
+                "61ido0DPl8q0dI1i011Do1b6669dPIlo",
+                "l6oP66ODld89Q99o0lDPP90qdbo11PPQ"
+            ],
+        ),
+        (
+            name: "TRIPLET",
+            songs: [
+                "DObld6O6OdblOo1di9dlP86DO909O6qI",
+                "ddOqqDI91bqqiOoll6I0i16i1P18019q",
+                "8bI68oIq08d99P880bDPQ9D80O099Q10",
+                "8o08l8DPiO01dlo1OI8DqQDq9lQ1bPq1"
+            ],
+        ),
         (
             name: "Let's DANCE!",
             search_names: [
@@ -309,6 +366,31 @@
                 "9i0q91lPPiO61b9P891O1i86iOP1I08O",
             ]
         ),
+        (
+            name: "10th Dan 十段",
+            songs: [
+                "QD9Ib18D9lIO10O19d16PbPb68q1190d",
+                "0bq9qI9PoPIlQl89bDO60o9q8I1iIP66",
+                "lO91bIQ0Q990PqPbPIq88b9I9PI6ID0Q",
+                "606b9d6OiliId69bO9Odi6qq8o8Qd0dq",
+            ]
+        ),
+        (
+            name: "Kaiden 皆伝",
+            search_names: [
+                "kaidan",
+                "keiden",
+                "keidan",
+                "kiadan",
+                "kiaden",
+            ],
+            songs: [
+                "bIlqP91O9ld1lqlq6qoq9OiPdqIDPP0l",
+                "6bid6d9qPQ80DOqiidQQ891o6Od8801l",
+                "186dd6DQq891Ib9Ilq8Qbo8lIqb0Qoll",
+                "PO9Pl1q896bDDl89qQb98D80DQoPio1I",
+            ]
+        ),
     ],
     // should we just combine single and doubles dans and just have a
     // songs_singles and songs_doubles array?
@@ -392,6 +474,31 @@
                 "8QbqP80q9PI8bbi0qOoiibOQD08OPdli",
                 "60P9IPOdi1OIbD61D8i0D9ODoq6QOIPO",
                 "606b9d6OiliId69bO9Odi6qq8o8Qd0dq",
+            ]
+        ),
+        (
+            name: "10th Dan 十段",
+            songs: [
+                "bo6PqbbPQ6D096OIP6dDPbPPiDi88609",
+                "6QdIl8odooDQ0oOQ0IObQqo1lO986PP6",
+                "o0l1Qioq1i9iQl6b9q6il0iqi1b1OQ9b",
+                "io1d1Dq80Di08O1Pb9bQ8DoP9d9Ooi90",
+            ]
+        ),
+        (
+            name: "Kaiden 皆伝",
+            search_names: [
+                "kaidan",
+                "keiden",
+                "keidan",
+                "kiadan",
+                "kiaden",
+            ],
+            songs: [
+                "8IdlOq1qI8OO1PP88I6olPiI6IqqqIIO",
+                "OddDoQ6dqi0QdQDDOO6qlO08d8bPbli1",
+                "186dd6DQq891Ib9Ilq8Qbo8lIqb0Qoll",
+                "q6di1DQbi88i9QlPol1iIPbb8lP1qP1b",
             ]
         ),
     ],

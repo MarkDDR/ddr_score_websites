@@ -7,10 +7,13 @@ pub enum SearchQuery<'query> {
     ByTitle {
         song_title: &'query str,
         chart_and_level: ChartAndLevel,
+        force_doubles: bool,
     },
+    // no one uses search by skill attack anymore, we should probably remove it
     BySkillAttackIndex {
         sa_index: SkillAttackIndex,
         chart_and_level: ChartAndLevel,
+        force_doubles: bool,
     },
 }
 
@@ -19,7 +22,10 @@ impl<'query> SearchQuery<'query> {
     // TODO Do we want to differentiate between there not being enough arguments
     // and not being able to parse the last arguments as being difficulties?
     // TODO use real error type. Put it in error.rs?
-    pub fn parse_query(query: &'query str) -> Result<Self, NotEnoughArguments> {
+    pub fn parse_query(
+        query: &'query str,
+        force_doubles: bool,
+    ) -> Result<Self, NotEnoughArguments> {
         /// Helper function to cut off the level arguments from the query
         fn cut_string_end<'a>(full: &'a str, end: &'a str) -> &'a str {
             let byte_offset = end.as_ptr() as usize - full.as_ptr() as usize;
@@ -36,47 +42,83 @@ impl<'query> SearchQuery<'query> {
         let last = last_str
             .map(|s| s.parse::<DifficultyOrLevel>().ok())
             .flatten();
-        let penultimate_str = last_two.next_back();
-        let penultimate = penultimate_str
-            .map(|s| s.parse::<DifficultyOrLevel>().ok())
-            .flatten();
-        use DifficultyOrLevel::*;
-        match (last, penultimate) {
-            // Either only last parsed, or last and penultimate parsed to the same variant type
-            // ignore penultimate and just use last
-            (Some(last), None)
-            | (Some(last @ Difficulty(_)), Some(Difficulty(_)))
-            | (Some(last @ Level(_)), Some(Level(_))) => {
+        // let penultimate_str = last_two.next_back();
+        // let penultimate = penultimate_str
+        //     .map(|s| s.parse::<DifficultyOrLevel>().ok())
+        //     .flatten();
+        // use DifficultyOrLevel::*;
+        match last {
+            Some(last) => {
                 let song_title = cut_string_end(query, last_str.unwrap()).trim();
+                let mut chart_and_level: ChartAndLevel = last.into();
+                if force_doubles {
+                    chart_and_level.force_doubles();
+                }
+
                 match song_title.parse::<SkillAttackIndex>() {
                     Ok(sa_index) => Ok(Self::BySkillAttackIndex {
                         sa_index,
-                        chart_and_level: last.into(),
+                        chart_and_level,
+                        force_doubles,
                     }),
                     Err(_) => Ok(Self::ByTitle {
                         song_title,
-                        chart_and_level: last.into(),
+                        chart_and_level,
+                        force_doubles,
                     }),
                 }
             }
-            // last and penultimate parsed to different variants, incorporate both and cut
-            // at where penultimate started
-            (Some(Difficulty(c)), Some(Level(l))) | (Some(Level(l)), Some(Difficulty(c))) => {
-                let song_title = cut_string_end(query, penultimate_str.unwrap()).trim();
-                match song_title.parse::<SkillAttackIndex>() {
-                    Ok(sa_index) => Ok(Self::BySkillAttackIndex {
-                        sa_index,
-                        chart_and_level: (c, l).into(),
-                    }),
-                    Err(_) => Ok(Self::ByTitle {
-                        song_title,
-                        chart_and_level: (c, l).into(),
-                    }),
-                }
-            }
-            // either neither parsed, or not enough arguments given
             _ => Err(NotEnoughArguments),
         }
+        // match (last, penultimate) {
+        //     // Either only last parsed, or last and penultimate parsed to the same variant type
+        //     // ignore penultimate and just use last
+        //     (Some(last), None)
+        //     | (Some(last @ Difficulty(_)), Some(Difficulty(_)))
+        //     | (Some(last @ Level(_)), Some(Level(_))) => {
+        //         let song_title = cut_string_end(query, last_str.unwrap()).trim();
+        //         let mut chart_and_level: ChartAndLevel = last.into();
+        //         if force_doubles {
+        //             chart_and_level.force_doubles();
+        //         }
+
+        //         match song_title.parse::<SkillAttackIndex>() {
+        //             Ok(sa_index) => Ok(Self::BySkillAttackIndex {
+        //                 sa_index,
+        //                 chart_and_level,
+        //                 force_doubles,
+        //             }),
+        //             Err(_) => Ok(Self::ByTitle {
+        //                 song_title,
+        //                 chart_and_level,
+        //                 force_doubles,
+        //             }),
+        //         }
+        //     }
+        //     // last and penultimate parsed to different variants, incorporate both and cut
+        //     // at where penultimate started
+        //     (Some(Difficulty(c)), Some(Level(l))) | (Some(Level(l)), Some(Difficulty(c))) => {
+        //         let song_title = cut_string_end(query, penultimate_str.unwrap()).trim();
+        //         let mut chart_and_level: ChartAndLevel = (c, l).into();
+        //         if force_doubles {
+        //             chart_and_level.force_doubles();
+        //         }
+        //         match song_title.parse::<SkillAttackIndex>() {
+        //             Ok(sa_index) => Ok(Self::BySkillAttackIndex {
+        //                 sa_index,
+        //                 chart_and_level,
+        //                 force_doubles,
+        //             }),
+        //             Err(_) => Ok(Self::ByTitle {
+        //                 song_title,
+        //                 chart_and_level,
+        //                 force_doubles,
+        //             }),
+        //         }
+        //     }
+        //     // either neither parsed, or not enough arguments given
+        //     _ => Err(NotEnoughArguments),
+        // }
     }
 
     pub fn search<'ddr_song>(
@@ -87,14 +129,17 @@ impl<'query> SearchQuery<'query> {
             SearchQuery::ByTitle {
                 song_title,
                 chart_and_level,
+                force_doubles,
             } => {
                 let (search_challenge, search_level) = match chart_and_level {
                     ChartAndLevel::Level(l) => (None, Some(l)),
-                    ChartAndLevel::Chart(c) => (Some(c == Chart::CSP), None),
-                    ChartAndLevel::Both(c, l) => (Some(c == Chart::CSP), Some(l)),
+                    ChartAndLevel::Chart(c) => (Some(c == Chart::CSP || c == Chart::CDP), None),
+                    ChartAndLevel::Both(c, l) => {
+                        (Some(c == Chart::CSP || c == Chart::CDP), Some(l))
+                    }
                 };
                 let query = song_title.to_lowercase();
-                let mut fuzzy_match_candidate = None;
+                let mut fuzzy_match_candidates = vec![];
 
                 for song in song_list
                     .into_iter()
@@ -109,7 +154,13 @@ impl<'query> SearchQuery<'query> {
                     .filter(|song| {
                         // level filter
                         match search_level {
-                            Some(l) => song.ratings.contains_single(l),
+                            Some(l) => {
+                                if force_doubles || chart_and_level.is_doubles_chart() {
+                                    song.ratings.contains_doubles(l)
+                                } else {
+                                    song.ratings.contains_single(l)
+                                }
+                            }
                             None => true, // no info so can't filter
                         }
                     })
@@ -119,31 +170,64 @@ impl<'query> SearchQuery<'query> {
                         // exact match, return right away
                         // This makes it so searching "bi" matches the right song
                         if search_name == &query {
-                            return SearchResult::new(song, chart_and_level);
+                            return SearchResult::new(song, chart_and_level, force_doubles);
                         }
+                        // check if we match this given search name, splitting
+                        // and removing the part we matched so the next word doesn't
+                        // accidentally match the same part
+                        let mut search_name_parts = vec![search_name.as_str()];
                         for query_word in query.split_whitespace() {
-                            if !search_name.contains(query_word) {
-                                continue 'next_name;
+                            match search_name_parts.iter().enumerate().find_map(|(i, s)| {
+                                match s.find(query_word) {
+                                    Some(cutoff) => Some((
+                                        i,
+                                        s[..cutoff].trim(),
+                                        s[cutoff + query_word.len()..].trim(),
+                                    )),
+                                    None => None,
+                                }
+                            }) {
+                                Some((i, left, right)) => {
+                                    // println!("Before {:?}", search_name_parts);
+                                    search_name_parts.remove(i);
+                                    if !right.is_empty() {
+                                        search_name_parts.insert(i, right);
+                                    }
+                                    if !left.is_empty() {
+                                        search_name_parts.insert(i, left);
+                                    }
+                                    // println!("After  {:?}", search_name_parts);
+                                }
+                                None => continue 'next_name,
                             }
                         }
-                        // we can try to employ some better heuristics here
-                        // current: Use first one alphabetically
-                        if fuzzy_match_candidate.is_none() {
-                            fuzzy_match_candidate = Some(song);
-                        }
+
+                        fuzzy_match_candidates.push((song, search_name_parts))
                     }
                 }
-                fuzzy_match_candidate.and_then(|song| SearchResult::new(song, chart_and_level))
+                // for (song, remaining_search_part) in &fuzzy_match_candidates {
+                //     println!("{} {:?}", song.song_name, remaining_search_part);
+                // }
+                // TODO use some better heuristics to choose the song if multiple songs match
+                // current: Whatever was first alphabetically
+                // This has trouble with "roppongi d", which matches on all the roppongi evolved
+                // chart and chooses "roppongi evolved ver.a"
+                // Alternative solution, get the "song patch" working and just put in search names
+                // for the roppongis without the "evolved"
+                fuzzy_match_candidates
+                    .get(0)
+                    .and_then(|(song, _)| SearchResult::new(song, chart_and_level, force_doubles))
             }
             SearchQuery::BySkillAttackIndex {
                 sa_index,
                 chart_and_level,
+                force_doubles,
             } => {
                 // No need to filter, we are just looking for a specific index
                 for song in song_list {
                     if song.skill_attack_index == Some(sa_index) {
                         // sanity check
-                        return SearchResult::new(song, chart_and_level);
+                        return SearchResult::new(song, chart_and_level, force_doubles);
                     }
                 }
                 // Couldn't find matching skill attack index
@@ -161,15 +245,28 @@ pub struct SearchResult<'ddr_song> {
 }
 
 impl<'ddr_song> SearchResult<'ddr_song> {
-    fn new(song: &'ddr_song DDRSong, chart_and_level: ChartAndLevel) -> Option<Self> {
-        let charts = [Chart::GSP, Chart::BSP, Chart::DSP, Chart::ESP, Chart::CSP];
-        let mut iter = song.ratings.single_difficulties().into_iter().zip(charts);
+    fn new(
+        song: &'ddr_song DDRSong,
+        chart_and_level: ChartAndLevel,
+        force_doubles: bool,
+    ) -> Option<Self> {
+        let singles_charts = [Chart::GSP, Chart::BSP, Chart::DSP, Chart::ESP, Chart::CSP];
+        let single_difficulties = song.ratings.single_difficulties();
+        let doubles_charts = [Chart::BDP, Chart::DDP, Chart::EDP, Chart::CDP];
+        let doubles_difficulties = song.ratings.doubles_difficulties();
+
+        let mut iter = if force_doubles || chart_and_level.is_doubles_chart() {
+            doubles_difficulties.iter().zip(doubles_charts.as_slice())
+        } else {
+            single_difficulties.iter().zip(singles_charts.as_slice())
+        };
+
         match chart_and_level {
-            ChartAndLevel::Level(level) => iter.find(|(l, _)| *l == level),
-            ChartAndLevel::Chart(chart) => iter.find(|(l, c)| *c == chart && *l != 0),
-            ChartAndLevel::Both(chart, level) => iter.find(|(l, c)| *c == chart && *l == level),
+            ChartAndLevel::Level(level) => iter.find(|(&l, _)| l == level),
+            ChartAndLevel::Chart(chart) => iter.find(|(&l, &c)| c == chart && l != 0),
+            ChartAndLevel::Both(chart, level) => iter.find(|(&l, &c)| c == chart && l == level),
         }
-        .map(|(level, chart)| Self { song, chart, level })
+        .map(|(&level, &chart)| Self { song, chart, level })
     }
 }
 
@@ -186,6 +283,30 @@ pub enum ChartAndLevel {
     Chart(Chart),
     /// both level and chart
     Both(Chart, u8),
+}
+
+impl ChartAndLevel {
+    fn is_doubles_chart(&self) -> bool {
+        match self {
+            ChartAndLevel::Chart(c) | ChartAndLevel::Both(c, _) => c.is_doubles(),
+            _ => false,
+        }
+    }
+
+    fn force_doubles(&mut self) {
+        match self {
+            ChartAndLevel::Chart(c) | ChartAndLevel::Both(c, _) => {
+                *c = match c {
+                    Chart::GSP | Chart::BSP => Chart::BDP,
+                    Chart::DSP => Chart::DDP,
+                    Chart::ESP => Chart::EDP,
+                    Chart::CSP => Chart::CDP,
+                    Chart::BDP | Chart::DDP | Chart::EDP | Chart::CDP => *c,
+                };
+            }
+            _ => {}
+        }
+    }
 }
 
 impl From<DifficultyOrLevel> for ChartAndLevel {
@@ -222,6 +343,10 @@ impl FromStr for DifficultyOrLevel {
             "dsp" | "DSP" | "Dsp" => Ok(Difficulty(DSP)),
             "esp" | "ESP" | "Esp" => Ok(Difficulty(ESP)),
             "csp" | "CSP" | "Csp" => Ok(Difficulty(CSP)),
+            "bdp" | "BDP" | "Bdp" => Ok(Difficulty(BDP)),
+            "ddp" | "DDP" | "Ddp" => Ok(Difficulty(DDP)),
+            "edp" | "EDP" | "Edp" => Ok(Difficulty(EDP)),
+            "cdp" | "CDP" | "Cdp" => Ok(Difficulty(CDP)),
             _ => {
                 if let Ok(level) = s.parse::<u8>() {
                     if 0 < level && level < 20 {
